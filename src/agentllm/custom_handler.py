@@ -17,18 +17,16 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # File handler for detailed logs
-file_handler = logging.FileHandler('agno_handler.log')
+file_handler = logging.FileHandler("agno_handler.log")
 file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-))
+file_handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
 
 # Console handler for important logs only
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(logging.Formatter(
-    '[AGNO] %(levelname)s: %(message)s'
-))
+console_handler.setFormatter(logging.Formatter("[AGNO] %(levelname)s: %(message)s"))
 
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
@@ -41,7 +39,9 @@ class AgnoCustomLLM(CustomLLM):
     Supports Agno session management for conversation continuity.
     """
 
-    def _extract_session_info(self, kwargs: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    def _extract_session_info(
+        self, kwargs: Dict[str, Any]
+    ) -> tuple[Optional[str], Optional[str]]:
         """Extract session_id and user_id from request kwargs.
 
         Checks multiple sources in priority order:
@@ -68,32 +68,35 @@ class AgnoCustomLLM(CustomLLM):
         if body_metadata:
             session_id = body_metadata.get("session_id") or body_metadata.get("chat_id")
             user_id = body_metadata.get("user_id")
-            logger.info(f"Found in body metadata: session_id={session_id}, user_id={user_id}")
+            logger.info(
+                f"Found in body metadata: session_id={session_id}, user_id={user_id}"
+            )
 
         # 2. Check OpenWebUI headers (ENABLE_FORWARD_USER_INFO_HEADERS)
         headers = litellm_params.get("metadata", {}).get("headers", {})
         if not session_id and headers:
             # Check for chat_id header (might be X-OpenWebUI-Chat-Id)
-            session_id = (
-                headers.get("x-openwebui-chat-id") or
-                headers.get("X-OpenWebUI-Chat-Id")
+            session_id = headers.get("x-openwebui-chat-id") or headers.get(
+                "X-OpenWebUI-Chat-Id"
             )
             logger.info(f"Found in headers: session_id={session_id}")
 
         if not user_id and headers:
             # Check for user_id header
             user_id = (
-                headers.get("x-openwebui-user-id") or
-                headers.get("X-OpenWebUI-User-Id") or
-                headers.get("x-openwebui-user-email") or
-                headers.get("X-OpenWebUI-User-Email")
+                headers.get("x-openwebui-user-id")
+                or headers.get("X-OpenWebUI-User-Id")
+                or headers.get("x-openwebui-user-email")
+                or headers.get("X-OpenWebUI-User-Email")
             )
             logger.info(f"Found in headers: user_id={user_id}")
 
         # 3. Check LiteLLM metadata
         if not session_id and "litellm_params" in kwargs:
             litellm_metadata = litellm_params.get("metadata", {})
-            session_id = litellm_metadata.get("session_id") or litellm_metadata.get("conversation_id")
+            session_id = litellm_metadata.get("session_id") or litellm_metadata.get(
+                "conversation_id"
+            )
             if session_id:
                 logger.info(f"Found in LiteLLM metadata: session_id={session_id}")
 
@@ -104,16 +107,92 @@ class AgnoCustomLLM(CustomLLM):
                 logger.info(f"Found in user field: user_id={user_id}")
 
         # Log what we're using
-        logger.info(f"Final extracted session info: user_id={user_id}, session_id={session_id}")
+        logger.info(
+            f"Final extracted session info: user_id={user_id}, session_id={session_id}"
+        )
 
         # Log full structure for debugging (only if nothing found)
         if not session_id and not user_id:
-            logger.warning("No session/user info found! Logging full request structure:")
-            logger.warning(f"Headers available: {list(headers.keys()) if headers else 'None'}")
-            logger.warning(f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}")
-            logger.warning(f"LiteLLM metadata keys: {list(litellm_params.get('metadata', {}).keys())}")
+            logger.warning(
+                "No session/user info found! Logging full request structure:"
+            )
+            logger.warning(
+                f"Headers available: {list(headers.keys()) if headers else 'None'}"
+            )
+            logger.warning(
+                f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}"
+            )
+            logger.warning(
+                f"LiteLLM metadata keys: {list(litellm_params.get('metadata', {}).keys())}"
+            )
 
         return session_id, user_id
+
+    def _get_agent(self, model: str, **kwargs):
+        """Get agent instance from model name with parameters.
+
+        Args:
+            model: Model name (e.g., "agno/echo" or just "echo")
+            **kwargs: Additional parameters (temperature, max_tokens, etc.)
+
+        Returns:
+            Agent instance
+
+        Raises:
+            Exception: If agent not found
+        """
+        # Extract agent name from model (handle both "agno/echo" and "echo")
+        agent_name = model.replace("agno/", "")
+
+        # Extract OpenAI parameters to pass to agent
+        temperature = kwargs.get("temperature")
+        max_tokens = kwargs.get("max_tokens")
+
+        # Get the agent with model parameters
+        try:
+            return get_agent(agent_name, temperature=temperature, max_tokens=max_tokens)
+        except KeyError as e:
+            raise Exception(f"Agent '{agent_name}' not found. {e}")
+
+    def _build_response(self, model: str, content: str) -> ModelResponse:
+        """Build a ModelResponse from agent output.
+
+        Args:
+            model: Model name
+            content: Agent response content
+
+        Returns:
+            ModelResponse object
+        """
+        message = Message(role="assistant", content=content)
+        choice = Choices(finish_reason="stop", index=0, message=message)
+
+        model_response = ModelResponse()
+        model_response.model = model
+        model_response.choices = [choice]
+        model_response.usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+
+        return model_response
+
+    def _extract_request_params(
+        self, messages: List[Dict[str, Any]], kwargs: Dict[str, Any]
+    ) -> tuple[str, Optional[str], Optional[str]]:
+        """Extract common request parameters.
+
+        Args:
+            messages: OpenAI-format messages
+            kwargs: Request parameters
+
+        Returns:
+            Tuple of (user_message, session_id, user_id)
+        """
+        user_message = self._extract_user_message(messages)
+        session_id, user_id = self._extract_session_info(kwargs)
+        return user_message, session_id, user_id
 
     def completion(
         self,
@@ -121,7 +200,7 @@ class AgnoCustomLLM(CustomLLM):
         messages: List[Dict[str, Any]],
         api_base: Optional[str] = None,
         custom_llm_provider: str = "agno",
-        **kwargs
+        **kwargs,
     ) -> ModelResponse:
         """Handle completion requests for Agno agents.
 
@@ -139,32 +218,8 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"kwargs: {kwargs}")
         logger.info(f"messages: {messages}")
 
-        # Extract agent name from model (handle both "agno/echo" and "echo")
-        agent_name = model.replace("agno/", "")
-
-        # Extract OpenAI parameters to pass to agent
-        temperature = kwargs.get("temperature")
-        max_tokens = kwargs.get("max_tokens")
-
-        # Get the agent with model parameters
-        try:
-            agent = get_agent(
-                agent_name,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-        except KeyError as e:
-            raise Exception(f"Agent '{agent_name}' not found. {e}")
-
-        # Extract user message from messages (last user message)
-        user_message = self._extract_user_message(messages)
-
-        # Extract session info for conversation continuity
-        session_id, user_id = self._extract_session_info(kwargs)
-
         # Check if streaming is requested
         stream = kwargs.get("stream", False)
-
         if stream:
             # Return streaming iterator
             return self.streaming(
@@ -172,39 +227,21 @@ class AgnoCustomLLM(CustomLLM):
                 messages=messages,
                 api_base=api_base,
                 custom_llm_provider=custom_llm_provider,
-                **kwargs
+                **kwargs,
             )
 
+        # Get agent instance and extract request parameters
+        agent = self._get_agent(model, **kwargs)
+        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+
         # Run the agent with session management
-        # Agno will automatically handle conversation history with add_history_to_context=True
         response = agent.run(
-            user_message,
-            stream=False,
-            session_id=session_id,
-            user_id=user_id
+            user_message, stream=False, session_id=session_id, user_id=user_id
         )
 
-        # Extract content from response
+        # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
-
-        # Build ModelResponse with proper types
-        message = Message(role="assistant", content=content)
-        choice = Choices(
-            finish_reason="stop",
-            index=0,
-            message=message
-        )
-
-        model_response = ModelResponse()
-        model_response.model = model
-        model_response.choices = [choice]
-        model_response.usage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
-
-        return model_response
+        return self._build_response(model, content)
 
     def streaming(
         self,
@@ -212,7 +249,7 @@ class AgnoCustomLLM(CustomLLM):
         messages: List[Dict[str, Any]],
         api_base: Optional[str] = None,
         custom_llm_provider: str = "agno",
-        **kwargs
+        **kwargs,
     ) -> Iterator[Dict[str, Any]]:
         """Handle streaming requests for Agno agents.
 
@@ -236,7 +273,7 @@ class AgnoCustomLLM(CustomLLM):
             messages=messages,
             api_base=api_base,
             custom_llm_provider=custom_llm_provider,
-            **{k: v for k, v in kwargs.items() if k != 'stream'}
+            **{k: v for k, v in kwargs.items() if k != "stream"},
         )
 
         # Extract content from the ModelResponse
@@ -252,9 +289,15 @@ class AgnoCustomLLM(CustomLLM):
             "is_finished": True,
             "tool_use": None,
             "usage": {
-                "completion_tokens": result.usage.get("completion_tokens", 0) if result.usage else 0,
-                "prompt_tokens": result.usage.get("prompt_tokens", 0) if result.usage else 0,
-                "total_tokens": result.usage.get("total_tokens", 0) if result.usage else 0,
+                "completion_tokens": (
+                    result.usage.get("completion_tokens", 0) if result.usage else 0
+                ),
+                "prompt_tokens": (
+                    result.usage.get("prompt_tokens", 0) if result.usage else 0
+                ),
+                "total_tokens": (
+                    result.usage.get("total_tokens", 0) if result.usage else 0
+                ),
             },
         }
 
@@ -264,7 +307,7 @@ class AgnoCustomLLM(CustomLLM):
         messages: List[Dict[str, Any]],
         api_base: Optional[str] = None,
         custom_llm_provider: str = "agno",
-        **kwargs
+        **kwargs,
     ) -> ModelResponse:
         """Async completion using agent.arun().
 
@@ -282,58 +325,18 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"kwargs: {kwargs}")
         logger.info(f"messages: {messages}")
 
-        # Extract agent name from model
-        agent_name = model.replace("agno/", "")
-
-        # Extract OpenAI parameters to pass to agent
-        temperature = kwargs.get("temperature")
-        max_tokens = kwargs.get("max_tokens")
-
-        # Get the agent with model parameters
-        try:
-            agent = get_agent(
-                agent_name,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-        except KeyError as e:
-            raise Exception(f"Agent '{agent_name}' not found. {e}")
-
-        # Extract user message
-        user_message = self._extract_user_message(messages)
-
-        # Extract session info for conversation continuity
-        session_id, user_id = self._extract_session_info(kwargs)
+        # Get agent instance and extract request parameters
+        agent = self._get_agent(model, **kwargs)
+        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
 
         # Run the agent asynchronously with session management
         response = await agent.arun(
-            user_message,
-            stream=False,
-            session_id=session_id,
-            user_id=user_id
+            user_message, stream=False, session_id=session_id, user_id=user_id
         )
 
-        # Extract content from response
+        # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
-
-        # Build ModelResponse with proper types
-        message = Message(role="assistant", content=content)
-        choice = Choices(
-            finish_reason="stop",
-            index=0,
-            message=message
-        )
-
-        model_response = ModelResponse()
-        model_response.model = model
-        model_response.choices = [choice]
-        model_response.usage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        }
-
-        return model_response
+        return self._build_response(model, content)
 
     async def astreaming(
         self,
@@ -341,7 +344,7 @@ class AgnoCustomLLM(CustomLLM):
         messages: List[Dict[str, Any]],
         api_base: Optional[str] = None,
         custom_llm_provider: str = "agno",
-        **kwargs
+        **kwargs,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Async streaming using Agno's native streaming support.
 
@@ -359,37 +362,15 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"kwargs: {kwargs}")
         logger.info(f"messages: {messages}")
 
-        # Extract agent name
-        agent_name = model.replace("agno/", "")
-
-        # Extract OpenAI parameters
-        temperature = kwargs.get("temperature")
-        max_tokens = kwargs.get("max_tokens")
-
-        # Get the agent with model parameters
-        try:
-            agent = get_agent(
-                agent_name,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-        except KeyError as e:
-            raise Exception(f"Agent '{agent_name}' not found. {e}")
-
-        # Extract user message
-        user_message = self._extract_user_message(messages)
-
-        # Extract session info for conversation continuity
-        session_id, user_id = self._extract_session_info(kwargs)
+        # Get agent instance and extract request parameters
+        agent = self._get_agent(model, **kwargs)
+        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
 
         # Use Agno's real async streaming with session management
         chunk_count = 0
 
         async for chunk in agent.arun(
-            user_message,
-            stream=True,
-            session_id=session_id,
-            user_id=user_id
+            user_message, stream=True, session_id=session_id, user_id=user_id
         ):
             # Extract content from chunk
             content = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -460,9 +441,7 @@ def register_agno_provider():
 
     Call this before using the proxy or making completion calls.
     """
-    litellm.custom_provider_map = [
-        {"provider": "agno", "custom_handler": agno_handler}
-    ]
+    litellm.custom_provider_map = [{"provider": "agno", "custom_handler": agno_handler}]
     print("✅ Registered Agno provider with LiteLLM")
 
 
