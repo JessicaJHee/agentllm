@@ -3,7 +3,6 @@
 import json
 import os
 import re
-from pathlib import Path
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -56,9 +55,13 @@ class GoogleDriveConfig(BaseToolkitConfig):
     4. Pasting the code back into the chat
     """
 
-    def __init__(self):
-        """Initialize Google Drive OAuth configuration."""
-        super().__init__()
+    def __init__(self, token_storage=None):
+        """Initialize Google Drive OAuth configuration.
+
+        Args:
+            token_storage: TokenStorage instance for database-backed credentials
+        """
+        super().__init__(token_storage)
 
         # Google Drive OAuth configuration from environment
         self._gdrive_client_id = os.environ.get("GDRIVE_CLIENT_ID")
@@ -71,7 +74,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
             "https://www.googleapis.com/auth/presentations.readonly",
         ]
 
-        # Store per-user Google Drive toolkits
+        # Store per-user Google Drive toolkits (in-memory cache)
         self._gdrive_toolkits: dict[str, GoogleDriveTools] = {}
 
     def is_configured(self, user_id: str) -> bool:
@@ -83,10 +86,17 @@ class GoogleDriveConfig(BaseToolkitConfig):
         Returns:
             True if user has valid Google Drive credentials
         """
-        if user_id not in self._user_configs:
-            return False
+        # Check database storage first (preferred)
+        if self.token_storage:
+            creds = self.token_storage.get_gdrive_credentials(user_id)
+            if creds:
+                return True
 
-        return "gdrive_token" in self._user_configs[user_id]
+        # Fall back to legacy in-memory storage
+        if user_id in self._user_configs and "gdrive_token" in self._user_configs[user_id]:
+            return True
+
+        return False
 
     def extract_and_store_config(self, message: str, user_id: str) -> str | None:
         """Extract and store Google Drive authorization code from message.
@@ -125,14 +135,19 @@ class GoogleDriveConfig(BaseToolkitConfig):
 
             logger.info(f"Google Drive token validated successfully for user {user_id}")
 
-            # Store the credentials as JSON (not the code)
-            if user_id not in self._user_configs:
-                self._user_configs[user_id] = {}
-            self._user_configs[user_id]["gdrive_token"] = creds.to_json()
+            # Store the credentials in database if available, otherwise in memory
+            if self.token_storage:
+                self.token_storage.upsert_gdrive_token(user_id, creds)
+                logger.info(f"Stored Google Drive credentials in database for user {user_id}")
+            else:
+                # Fall back to in-memory storage (legacy)
+                if user_id not in self._user_configs:
+                    self._user_configs[user_id] = {}
+                self._user_configs[user_id]["gdrive_token"] = creds.to_json()
+                logger.info(f"Stored Google Drive credentials in memory for user {user_id}")
 
-            # Create GoogleDriveTools toolkit for this user
-            workspace_dir = Path(f"tmp/gdrive_workspace/{user_id}")
-            toolkit = GoogleDriveTools(credentials=creds, workspace_dir=workspace_dir)
+            # Create GoogleDriveTools toolkit for this user with credentials
+            toolkit = GoogleDriveTools(credentials=creds)
             self._gdrive_toolkits[user_id] = toolkit
             logger.info(f"Created Google Drive toolkit for user {user_id}")
 
@@ -441,34 +456,59 @@ class GoogleDriveConfig(BaseToolkitConfig):
         Returns:
             Google OAuth2 credentials if stored, None otherwise
         """
-        if user_id not in self._user_configs:
-            return None
+        creds = None
 
-        token_json = self._user_configs[user_id].get("gdrive_token")
-        if not token_json:
-            return None
+        # Try to get from database first (preferred)
+        if self.token_storage:
+            creds = self.token_storage.get_gdrive_credentials(user_id)
+            if creds:
+                logger.debug(f"Retrieved Google Drive credentials from database for user {user_id}")
 
-        try:
-            # Parse credentials from JSON
-            token_data = json.loads(token_json)
-            creds = Credentials.from_authorized_user_info(token_data, self._gdrive_scopes)
+                # Refresh if expired
+                if creds.expired and creds.refresh_token:
+                    try:
+                        creds.refresh(Request())
+                        # Update stored credentials with new token
+                        self.token_storage.upsert_gdrive_token(user_id, creds)
+                        logger.info(f"Refreshed Google Drive token for user {user_id}")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to refresh Google Drive token for user {user_id}: {e}"
+                        )
 
-            # Refresh if expired
-            if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-                # Update stored credentials with new token
-                self._user_configs[user_id]["gdrive_token"] = creds.to_json()
-                logger.info(f"Refreshed Google Drive token for user {user_id}")
+                # Ensure toolkit exists for this user
+                if user_id not in self._gdrive_toolkits:
+                    toolkit = GoogleDriveTools(credentials=creds)
+                    self._gdrive_toolkits[user_id] = toolkit
+                    logger.info(f"Recreated Google Drive toolkit for user {user_id}")
 
-            # Ensure toolkit exists for this user
-            if user_id not in self._gdrive_toolkits:
-                workspace_dir = Path(f"tmp/gdrive_workspace/{user_id}")
-                toolkit = GoogleDriveTools(credentials=creds, workspace_dir=workspace_dir)
-                self._gdrive_toolkits[user_id] = toolkit
-                logger.info(f"Recreated Google Drive toolkit for user {user_id}")
+                return creds
 
-            return creds
+        # Fall back to legacy in-memory storage
+        if user_id in self._user_configs:
+            token_json = self._user_configs[user_id].get("gdrive_token")
+            if token_json:
+                try:
+                    # Parse credentials from JSON
+                    token_data = json.loads(token_json)
+                    creds = Credentials.from_authorized_user_info(token_data, self._gdrive_scopes)
 
-        except Exception as e:
-            logger.error(f"Failed to load Google Drive credentials for user {user_id}: {e}")
-            return None
+                    # Refresh if expired
+                    if creds.expired and creds.refresh_token:
+                        creds.refresh(Request())
+                        # Update stored credentials with new token
+                        self._user_configs[user_id]["gdrive_token"] = creds.to_json()
+                        logger.info(f"Refreshed Google Drive token (in-memory) for user {user_id}")
+
+                    # Ensure toolkit exists for this user
+                    if user_id not in self._gdrive_toolkits:
+                        toolkit = GoogleDriveTools(credentials=creds)
+                        self._gdrive_toolkits[user_id] = toolkit
+                        logger.info(f"Recreated Google Drive toolkit (legacy) for user {user_id}")
+
+                    return creds
+
+                except Exception as e:
+                    logger.error(f"Failed to load Google Drive credentials for user {user_id}: {e}")
+
+        return None

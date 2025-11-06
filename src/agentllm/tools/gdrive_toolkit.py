@@ -1,18 +1,14 @@
 """Google Drive toolkit for retrieving document content.
 
-Supports both direct OAuth credentials and database-backed token storage.
 Returns document content as strings instead of saving to disk.
 """
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agno.tools import Toolkit
 from google.oauth2.credentials import Credentials
 from loguru import logger
-
-if TYPE_CHECKING:
-    from agentllm.db import TokenStorage
 
 from .gdrive_utils import GoogleDriveExporter
 
@@ -20,52 +16,21 @@ from .gdrive_utils import GoogleDriveExporter
 class GoogleDriveTools(Toolkit):
     """Toolkit for retrieving content from Google Drive documents.
 
-    Supports both direct OAuth credentials and database-backed token storage.
     Returns document content as strings. Documents are returned as markdown,
     spreadsheets as CSV, and presentations as plain text.
     """
 
     def __init__(
         self,
-        credentials: Credentials | None = None,
-        token_storage: "TokenStorage | None" = None,
-        user_id: str | None = None,
+        credentials: Credentials,
         **kwargs,
     ):
         """Initialize Google Drive toolkit with OAuth credentials.
 
-        Supports two authentication modes:
-        1. Direct: Provide credentials directly
-        2. Database: Provide token_storage and user_id to fetch from database
-
         Args:
-            credentials: Google OAuth2 credentials (required if not using database)
-            token_storage: TokenStorage instance for database-backed authentication
-            user_id: User ID to fetch credentials from database (requires token_storage)
+            credentials: Google OAuth2 credentials
             **kwargs: Additional arguments passed to parent Toolkit
-
-        Raises:
-            ValueError: If neither direct credentials nor database credentials are provided
         """
-        # Load credentials from database if token_storage and user_id provided
-        if token_storage and user_id:
-            logger.debug(f"Loading Google Drive credentials from database for user {user_id}")
-            credentials = token_storage.get_gdrive_credentials(user_id)
-
-            if credentials:
-                logger.info(f"Loaded Google Drive credentials from database for user {user_id}")
-            else:
-                raise ValueError(
-                    f"No Google Drive credentials found in database for user {user_id}"
-                )
-
-        # Otherwise use direct credentials
-        elif credentials:
-            logger.debug("Using directly provided Google Drive credentials")
-
-        else:
-            raise ValueError("Must provide either credentials or (token_storage + user_id)")
-
         # Create exporter with pre-authenticated credentials (no file storage needed)
         self.exporter = GoogleDriveExporter(credentials=credentials)
 
