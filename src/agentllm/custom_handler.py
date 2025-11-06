@@ -39,6 +39,13 @@ class AgnoCustomLLM(CustomLLM):
     Supports Agno session management for conversation continuity.
     """
 
+    def __init__(self):
+        """Initialize the custom LLM handler with agent cache."""
+        super().__init__()
+        # Cache agents by (agent_name, temperature, max_tokens, user_id)
+        self._agent_cache: Dict[tuple, Any] = {}
+        logger.info("Initialized AgnoCustomLLM with agent caching")
+
     def _extract_session_info(
         self, kwargs: Dict[str, Any]
     ) -> tuple[Optional[str], Optional[str]]:
@@ -128,15 +135,18 @@ class AgnoCustomLLM(CustomLLM):
 
         return session_id, user_id
 
-    def _get_agent(self, model: str, **kwargs):
+    def _get_agent(self, model: str, user_id: Optional[str] = None, **kwargs):
         """Get agent instance from model name with parameters.
+
+        Uses caching to reuse agent instances for the same configuration and user.
 
         Args:
             model: Model name (e.g., "agno/echo" or just "echo")
+            user_id: User ID for agent isolation
             **kwargs: Additional parameters (temperature, max_tokens, etc.)
 
         Returns:
-            Agent instance
+            Agent instance (cached or newly created)
 
         Raises:
             Exception: If agent not found
@@ -148,9 +158,21 @@ class AgnoCustomLLM(CustomLLM):
         temperature = kwargs.get("temperature")
         max_tokens = kwargs.get("max_tokens")
 
-        # Get the agent with model parameters
+        # Build cache key from agent configuration and user_id
+        cache_key = (agent_name, temperature, max_tokens, user_id)
+
+        # Check if agent exists in cache
+        if cache_key in self._agent_cache:
+            logger.info(f"Using cached agent for key: {cache_key}")
+            return self._agent_cache[cache_key]
+
+        # Create new agent and cache it
+        logger.info(f"Creating new agent for key: {cache_key}")
         try:
-            return get_agent(agent_name, temperature=temperature, max_tokens=max_tokens)
+            agent = get_agent(agent_name, temperature=temperature, max_tokens=max_tokens)
+            self._agent_cache[cache_key] = agent
+            logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
+            return agent
         except KeyError as e:
             raise Exception(f"Agent '{agent_name}' not found. {e}")
 
@@ -230,9 +252,11 @@ class AgnoCustomLLM(CustomLLM):
                 **kwargs,
             )
 
-        # Get agent instance and extract request parameters
-        agent = self._get_agent(model, **kwargs)
+        # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+
+        # Get agent instance (with caching based on user_id)
+        agent = self._get_agent(model, user_id=user_id, **kwargs)
 
         # Run the agent with session management
         response = agent.run(
@@ -241,7 +265,7 @@ class AgnoCustomLLM(CustomLLM):
 
         # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
-        return self._build_response(model, content)
+        return self._build_response(model, str(content))
 
     def streaming(
         self,
@@ -325,9 +349,11 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"kwargs: {kwargs}")
         logger.info(f"messages: {messages}")
 
-        # Get agent instance and extract request parameters
-        agent = self._get_agent(model, **kwargs)
+        # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+
+        # Get agent instance (with caching based on user_id)
+        agent = self._get_agent(model, user_id=user_id, **kwargs)
 
         # Run the agent asynchronously with session management
         response = await agent.arun(
@@ -336,7 +362,7 @@ class AgnoCustomLLM(CustomLLM):
 
         # Extract content and build response
         content = response.content if hasattr(response, "content") else str(response)
-        return self._build_response(model, content)
+        return self._build_response(model, str(content))
 
     async def astreaming(
         self,
@@ -362,9 +388,11 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"kwargs: {kwargs}")
         logger.info(f"messages: {messages}")
 
-        # Get agent instance and extract request parameters
-        agent = self._get_agent(model, **kwargs)
+        # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+
+        # Get agent instance (with caching based on user_id)
+        agent = self._get_agent(model, user_id=user_id, **kwargs)
 
         # Use Agno's real async streaming with session management
         chunk_count = 0
