@@ -25,7 +25,7 @@ def create_echo_agent(
         max_tokens: Maximum tokens in response
         **model_kwargs: Additional model parameters
     """
-    model_params = {"id": "gemini-2.0-flash"}
+    model_params = {"id": "gemini-2.5-flash"}
     if temperature is not None:
         model_params["temperature"] = temperature
     if max_tokens is not None:
@@ -61,7 +61,7 @@ def create_assistant_agent(
         max_tokens: Maximum tokens in response
         **model_kwargs: Additional model parameters
     """
-    model_params = {"id": "gemini-2.0-flash"}
+    model_params = {"id": "gemini-2.5-flash"}
     if temperature is not None:
         model_params["temperature"] = temperature
     if max_tokens is not None:
@@ -98,7 +98,7 @@ def create_code_agent(
         max_tokens: Maximum tokens in response
         **model_kwargs: Additional model parameters
     """
-    model_params = {"id": "gemini-2.0-flash"}
+    model_params = {"id": "gemini-2.5-flash"}
     if temperature is not None:
         model_params["temperature"] = temperature
     if max_tokens is not None:

@@ -26,37 +26,21 @@ model_list:
       description: "Coding assistant for programming tasks"
       mode: chat
 
-  # Google Gemini models
+  # Google Gemini 2.5 models
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Google Gemini 2.5 Pro - Most capable model"
+      mode: chat
+
   - model_name: gemini-2.5-flash
     litellm_params:
       model: gemini/gemini-2.5-flash
       api_key: os.environ/GEMINI_API_KEY
     model_info:
-      description: "Google Gemini 2.5 Flash - Latest, fastest Gemini model"
-      mode: chat
-
-  - model_name: gemini-2.0-flash
-    litellm_params:
-      model: gemini/gemini-2.0-flash
-      api_key: os.environ/GEMINI_API_KEY
-    model_info:
-      description: "Google Gemini 2.0 Flash - Stable, efficient model"
-      mode: chat
-
-  - model_name: gemini-1.5-pro
-    litellm_params:
-      model: gemini/gemini-1.5-pro
-      api_key: os.environ/GEMINI_API_KEY
-    model_info:
-      description: "Google Gemini 1.5 Pro - Most capable Gemini model"
-      mode: chat
-
-  - model_name: gemini-1.5-flash
-    litellm_params:
-      model: gemini/gemini-1.5-flash
-      api_key: os.environ/GEMINI_API_KEY
-    model_info:
-      description: "Google Gemini 1.5 Flash - Fast and efficient"
+      description: "Google Gemini 2.5 Flash - Fast and efficient"
       mode: chat
 
 # General configuration

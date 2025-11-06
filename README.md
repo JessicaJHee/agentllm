@@ -103,16 +103,14 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 
 ### Available Models
 
-**Agno Agents** (powered by Gemini 2.0 Flash):
+**Agno Agents** (powered by Gemini 2.5 Flash):
 - `agno/echo` - Simple echo agent for testing
 - `agno/assistant` - General-purpose helpful assistant
 - `agno/code-helper` - Coding assistant for programming tasks
 
-**Direct Gemini Models:**
-- `gemini-2.5-flash` - Latest, fastest Gemini model
-- `gemini-2.0-flash` - Stable, efficient model (used by Agno agents)
-- `gemini-1.5-pro` - Most capable Gemini model
-- `gemini-1.5-flash` - Fast and efficient
+**Direct Gemini 2.5 Models:**
+- `gemini-2.5-pro` - Most capable model
+- `gemini-2.5-flash` - Fast and efficient (used by Agno agents)
 
 > **Note:** All models require a single `GEMINI_API_KEY` in your `.env` file. Get your API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
@@ -245,7 +243,7 @@ Edit `src/agentllm/proxy_config.yaml` to:
 
 The proxy already includes configurations for:
 - **Agno agents** (custom agents with specialized behaviors)
-- **Google Gemini models** (gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash)
+- **Google Gemini 2.5 models** (gemini-2.5-pro, gemini-2.5-flash)
 
 ## Provider Implementation
 
