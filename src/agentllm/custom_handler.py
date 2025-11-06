@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 import litellm
+from agno.db.sqlite import SqliteDb
 from litellm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
-from agno.db.sqlite import SqliteDb
 
-from agentllm.agents.examples import get_agent
+from agentllm.agents.release_manager import get_agent
 
 # Configure logging for our custom handler
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ class AgnoCustomLLM(CustomLLM):
         Uses caching to reuse agent instances for the same configuration and user.
 
         Args:
-            model: Model name (e.g., "agno/echo" or just "echo")
+            model: Model name (e.g., "agno/release-manager" or just "release-manager")
             user_id: User ID for agent isolation
             **kwargs: Additional parameters (temperature, max_tokens, etc.)
 
@@ -151,7 +151,7 @@ class AgnoCustomLLM(CustomLLM):
         Raises:
             Exception: If agent not found
         """
-        # Extract agent name from model (handle both "agno/echo" and "echo")
+        # Extract agent name from model (handle both "agno/release-manager" and "release-manager")
         agent_name = model.replace("agno/", "")
 
         # Extract OpenAI parameters to pass to agent
@@ -169,7 +169,9 @@ class AgnoCustomLLM(CustomLLM):
         # Create new agent and cache it
         logger.info(f"Creating new agent for key: {cache_key}")
         try:
-            agent = get_agent(agent_name, temperature=temperature, max_tokens=max_tokens)
+            agent = get_agent(
+                agent_name, temperature=temperature, max_tokens=max_tokens
+            )
             self._agent_cache[cache_key] = agent
             logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
             return agent
@@ -227,7 +229,7 @@ class AgnoCustomLLM(CustomLLM):
         """Handle completion requests for Agno agents.
 
         Args:
-            model: Model name (e.g., "agno/echo" or just "echo")
+            model: Model name (e.g., "agno/release-manager" or just "release-manager")
             messages: OpenAI-format messages
             api_base: API base URL (not used for in-process)
             custom_llm_provider: Provider name
@@ -253,7 +255,9 @@ class AgnoCustomLLM(CustomLLM):
             )
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
@@ -336,7 +340,7 @@ class AgnoCustomLLM(CustomLLM):
         """Async completion using agent.arun().
 
         Args:
-            model: Model name (e.g., "agno/echo" or just "echo")
+            model: Model name (e.g., "agno/release-manager" or just "release-manager")
             messages: OpenAI-format messages
             api_base: API base URL (not used for in-process)
             custom_llm_provider: Provider name
@@ -350,7 +354,9 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"messages: {messages}")
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
@@ -389,7 +395,9 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"messages: {messages}")
 
         # Extract request parameters first (need user_id for agent cache)
-        user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
+        user_message, session_id, user_id = self._extract_request_params(
+            messages, kwargs
+        )
 
         # Get agent instance (with caching based on user_id)
         agent = self._get_agent(model, user_id=user_id, **kwargs)
@@ -477,4 +485,4 @@ if __name__ == "__main__":
     # Auto-register when run as script
     register_agno_provider()
     print("\n🚀 Agno provider registered!")
-    print("   You can now use models like: agno/echo, agno/assistant")
+    print("   You can now use models like: agno/release-manager")

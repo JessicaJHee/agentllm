@@ -13,7 +13,7 @@ services:
       ENABLE_OLLAMA_API: "false"
 
       # Optional: Set default model
-      DEFAULT_MODELS: "agno/assistant"
+      DEFAULT_MODELS: "agno/release-manager"
 
       # Optional: Enable verbose logging
       WEBUI_DEBUG: "true"

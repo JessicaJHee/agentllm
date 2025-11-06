@@ -67,11 +67,7 @@ def hello(session):
 
     # Check if proxy is running
     print("1️⃣  Checking if proxy is running on port 8890...")
-    result = subprocess.run(
-        ["lsof", "-i:8890"],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["lsof", "-i:8890"], capture_output=True, text=True)
 
     if result.returncode != 0:
         print("❌ Proxy is not running!")
@@ -86,9 +82,7 @@ def hello(session):
     # Test 1: Health check
     print("2️⃣  Testing /health endpoint...")
     result = subprocess.run(
-        ["curl", "-s", "http://localhost:8890/health"],
-        capture_output=True,
-        text=True
+        ["curl", "-s", "http://localhost:8890/health"], capture_output=True, text=True
     )
     print(f"   Response: {result.stdout}\n")
 
@@ -96,12 +90,14 @@ def hello(session):
     print("3️⃣  Testing /v1/models endpoint...")
     result = subprocess.run(
         [
-            "curl", "-s",
+            "curl",
+            "-s",
             "http://localhost:8890/v1/models",
-            "-H", "Authorization: Bearer sk-agno-test-key-12345"
+            "-H",
+            "Authorization: Bearer sk-agno-test-key-12345",
         ],
         capture_output=True,
-        text=True
+        text=True,
     )
     try:
         data = json.loads(result.stdout)
@@ -111,32 +107,42 @@ def hello(session):
         print(f"   Response: {result.stdout}\n")
 
     # Test 3: Hello world chat completion
-    print("4️⃣  Testing chat completion with agno/echo...")
+    print("4️⃣  Testing chat completion with agno/release-manager...")
     print("   (Note: This will fail without LLM API keys configured)\n")
 
     result = subprocess.run(
         [
-            "curl", "-s",
+            "curl",
+            "-s",
             "http://localhost:8890/v1/chat/completions",
-            "-H", "Authorization: Bearer sk-agno-test-key-12345",
-            "-H", "Content-Type: application/json",
-            "-d", json.dumps({
-                "model": "agno/echo",
-                "messages": [{"role": "user", "content": "Hello from nox!"}]
-            })
+            "-H",
+            "Authorization: Bearer sk-agno-test-key-12345",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            json.dumps(
+                {
+                    "model": "agno/release-manager",
+                    "messages": [{"role": "user", "content": "Hello from nox!"}],
+                }
+            ),
         ],
         capture_output=True,
-        text=True
+        text=True,
     )
 
     print("   Request:")
-    print('   {"model": "agno/echo", "messages": [{"role": "user", "content": "Hello from nox!"}]}')
+    print(
+        '   {"model": "agno/release-manager", "messages": [{"role": "user", "content": "Hello from nox!"}]}'
+    )
     print("\n   Response:")
     try:
         data = json.loads(result.stdout)
         if "error" in data:
             print(f"   ❌ Error: {data['error']}")
-            print("\n   💡 This is expected if agents don't have LLM API keys configured.")
+            print(
+                "\n   💡 This is expected if agents don't have LLM API keys configured."
+            )
             print("      To fix: Add API keys to .env and configure agents with models")
         elif "choices" in data:
             content = data["choices"][0]["message"]["content"]

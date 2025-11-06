@@ -52,7 +52,7 @@ agentllm/
 │   ├── provider/
 │   │   └── transformation.py    # LiteLLM provider implementation
 │   ├── agents/
-│   │   └── examples.py          # Example Agno agents
+│   │   └── release_manager.py   # Release manager Agno agent
 │   └── proxy_config.yaml        # LiteLLM proxy configuration
 ├── tests/
 │   └── test_provider.py         # TDD unit tests
@@ -94,9 +94,9 @@ curl -X POST http://localhost:8890/v1/chat/completions \
   -H "Authorization: Bearer sk-agno-test-key-12345" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "agno/assistant",
+    "model": "agno/release-manager",
     "messages": [
-      {"role": "user", "content": "Hello!"}
+      {"role": "user", "content": "Help me plan a release"}
     ]
   }'
 ```
@@ -104,9 +104,7 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 ### Available Models
 
 **Agno Agents** (powered by Gemini 2.5 Flash):
-- `agno/echo` - Simple echo agent for testing
-- `agno/assistant` - General-purpose helpful assistant
-- `agno/code-helper` - Coding assistant for programming tasks
+- `agno/release-manager` - Release management assistant for software releases, changelogs, and version planning
 
 **Direct Gemini 2.5 Models:**
 - `gemini-2.5-pro` - Most capable model
@@ -151,22 +149,58 @@ This project follows Test-Driven Development (TDD):
 
 ### Adding New Agents
 
-1. Define your agent in `src/agentllm/agents/examples.py`:
+1. Create a new file in `src/agentllm/agents/` (e.g., `my_agent.py`):
 
 ```python
-def create_my_agent() -> Agent:
+from pathlib import Path
+from typing import Optional
+from agno.agent import Agent
+from agno.models.google import Gemini
+from agno.db.sqlite import SqliteDb
+
+# Use shared database
+DB_PATH = Path("tmp/agno_sessions.db")
+DB_PATH.parent.mkdir(exist_ok=True)
+shared_db = SqliteDb(db_file=str(DB_PATH))
+
+def create_my_agent(
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    **model_kwargs
+) -> Agent:
+    model_params = {"id": "gemini-2.5-flash"}
+    if temperature is not None:
+        model_params["temperature"] = temperature
+    if max_tokens is not None:
+        model_params["max_tokens"] = max_tokens
+    model_params.update(model_kwargs)
+
     return Agent(
         name="my-agent",
+        model=Gemini(**model_params),
         description="My custom agent",
         instructions=["Your instructions here"],
         markdown=True,
+        db=shared_db,
+        add_history_to_context=True,
+        num_history_runs=10,
+        read_chat_history=True,
     )
 
-# Register in AGENT_REGISTRY
-AGENT_REGISTRY["my-agent"] = create_my_agent
+def get_agent(
+    agent_name: str = "my-agent",
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    **model_kwargs
+) -> Agent:
+    if agent_name != "my-agent":
+        raise KeyError(f"Agent '{agent_name}' not found.")
+    return create_my_agent(temperature, max_tokens, **model_kwargs)
 ```
 
-2. Add to `proxy_config.yaml`:
+2. Update imports in `src/agentllm/custom_handler.py` to use your new agent module
+
+3. Add to `proxy_config.yaml`:
 
 ```yaml
   - model_name: agno/my-agent
@@ -176,7 +210,7 @@ AGENT_REGISTRY["my-agent"] = create_my_agent
       custom_llm_provider: agno
 ```
 
-3. Restart the proxy
+4. Restart the proxy
 
 ## Running with Open WebUI
 
@@ -204,8 +238,8 @@ export GEMINI_API_KEY="your-gemini-api-key-here"
 
 4. **Select an Agno agent**:
    - Click on the model selector
-   - Choose `agno/assistant`, `agno/echo`, or `agno/code-helper`
-   - Start chatting with your Agno agents!
+   - Choose `agno/release-manager`
+   - Start chatting with your Agno agent!
 
 ### Configuration
 

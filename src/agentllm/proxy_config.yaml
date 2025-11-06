@@ -2,28 +2,12 @@
 # This configuration exposes Agno agents as OpenAI-compatible models
 
 model_list:
-  - model_name: agno/echo
+  - model_name: agno/release-manager
     litellm_params:
-      model: agno/echo
+      model: agno/release-manager
       custom_llm_provider: agno
     model_info:
-      description: "Simple echo agent that repeats back messages"
-      mode: chat
-
-  - model_name: agno/assistant
-    litellm_params:
-      model: agno/assistant
-      custom_llm_provider: agno
-    model_info:
-      description: "General-purpose helpful assistant"
-      mode: chat
-
-  - model_name: agno/code-helper
-    litellm_params:
-      model: agno/code-helper
-      custom_llm_provider: agno
-    model_info:
-      description: "Coding assistant for programming tasks"
+      description: "Release management assistant for software releases, changelogs, and version planning"
       mode: chat
 
   # Google Gemini 2.5 models
