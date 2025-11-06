@@ -1,16 +1,13 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
 import logging
-import time
-from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 import litellm
-from agno.db.sqlite import SqliteDb
 from litellm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 
-from agentllm.agents.release_manager import get_agent
+from agentllm.agents.release_manager import ReleaseManager
 
 # Configure logging for our custom handler
 logger = logging.getLogger(__name__)
@@ -168,15 +165,18 @@ class AgnoCustomLLM(CustomLLM):
 
         # Create new agent and cache it
         logger.info(f"Creating new agent for key: {cache_key}")
-        try:
-            agent = get_agent(
-                agent_name, temperature=temperature, max_tokens=max_tokens
+
+        # Instantiate the agent class based on agent_name
+        if agent_name == "release-manager":
+            agent = ReleaseManager(temperature=temperature, max_tokens=max_tokens)
+        else:
+            raise Exception(
+                f"Agent '{agent_name}' not found. Only 'release-manager' is available."
             )
-            self._agent_cache[cache_key] = agent
-            logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
-            return agent
-        except KeyError as e:
-            raise Exception(f"Agent '{agent_name}' not found. {e}")
+
+        self._agent_cache[cache_key] = agent
+        logger.info(f"Cached agent. Total cached agents: {len(self._agent_cache)}")
+        return agent
 
     def _build_response(self, model: str, content: str) -> ModelResponse:
         """Build a ModelResponse from agent output.
