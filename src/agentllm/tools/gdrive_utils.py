@@ -982,6 +982,109 @@ class GoogleDriveExporter:
 
         return exported_files
 
+    def get_document_content_as_string(
+        self, document_id: str, format_key: str | None = None
+    ) -> str | None:
+        """Get document content as a string without saving to disk.
+
+        Args:
+            document_id: Google Drive document ID or URL.
+            format_key: Export format (md, txt, csv, etc.). If None, automatically selects
+                       based on document type: md for docs, csv for sheets, txt for slides.
+
+        Returns:
+            Document content as string, or None if export fails.
+        """
+        # Extract document ID
+        original_url_or_id = document_id
+        document_id = self.extract_document_id(document_id)
+
+        # Detect document type
+        doc_type = self.detect_document_type(original_url_or_id)
+
+        try:
+            # Get metadata to detect type if needed
+            if doc_type == DocumentType.UNKNOWN:
+                metadata = self.get_document_metadata(document_id, None)
+                doc_type = self.detect_document_type_from_metadata(metadata)
+        except Exception as e:
+            logger.warning(f"Could not get metadata for {document_id}: {e}")
+            doc_type = DocumentType.DOCUMENT
+
+        # Get appropriate export formats and default format based on document type
+        if doc_type == DocumentType.SPREADSHEET:
+            export_formats = self.SPREADSHEET_EXPORT_FORMATS
+            # Auto-detect format if not specified
+            if format_key is None:
+                format_key = "csv"
+            # For spreadsheets, default to CSV if markdown requested
+            elif format_key == "md":
+                format_key = "csv"
+        elif doc_type == DocumentType.PRESENTATION:
+            export_formats = self.PRESENTATION_EXPORT_FORMATS
+            # Auto-detect format if not specified
+            if format_key is None:
+                format_key = "txt"
+            # For presentations, default to txt if markdown requested
+            elif format_key == "md":
+                format_key = "txt"
+        else:
+            export_formats = self.DOCUMENT_EXPORT_FORMATS
+            # Auto-detect format if not specified
+            if format_key is None:
+                format_key = "md"
+
+        if format_key not in export_formats:
+            logger.error(
+                f"Format '{format_key}' not supported for {doc_type.value if doc_type else 'document'} type"
+            )
+            return None
+
+        export_format = export_formats[format_key]
+
+        try:
+            # For markdown, export as HTML first then convert
+            if format_key == "md":
+                if doc_type != DocumentType.DOCUMENT:
+                    logger.warning(f"Markdown not supported for {doc_type.value}")
+                    return None
+                request = self.service.files().export_media(
+                    fileId=document_id, mimeType="text/html"
+                )
+            else:
+                request = self.service.files().export_media(
+                    fileId=document_id, mimeType=export_format.mime_type
+                )
+
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+
+            while not done:
+                status, done = downloader.next_chunk()
+                if status:
+                    progress = int(status.progress() * 100)
+                    logger.debug(f"Download progress: {progress}%")
+
+            # Handle markdown conversion
+            if format_key == "md":
+                html_content = fh.getvalue().decode("utf-8")
+                markdown_content = convert_to_markdown(html_content)
+                return markdown_content
+            else:
+                # Return as string for text-based formats
+                return fh.getvalue().decode("utf-8")
+
+        except HttpError as error:
+            if "The requested conversion is not supported" in str(error):
+                logger.warning(f"Format {format_key} not supported for this document type")
+            else:
+                logger.error(f"Failed to export {format_key}: {error}")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting document content: {e}")
+            return None
+
     def export_multiple(self, document_ids: list[str]) -> dict[str, dict[str, Path]]:
         """Export multiple documents.
 

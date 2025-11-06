@@ -1,187 +1,109 @@
-"""Google Drive toolkit for downloading documents to workspace.
+"""Google Drive toolkit for retrieving document content.
 
-Modified version that accepts OAuth credentials directly instead of file paths.
-This allows per-user credential management in the Release Manager.
+Supports both direct OAuth credentials and database-backed token storage.
+Returns document content as strings instead of saving to disk.
 """
 
 import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agno.tools import Toolkit
 from google.oauth2.credentials import Credentials
 from loguru import logger
 
-from .gdrive_utils import GoogleDriveExporter, GoogleDriveExporterConfig
+if TYPE_CHECKING:
+    from agentllm.db import TokenStorage
+
+from .gdrive_utils import GoogleDriveExporter
 
 
 class GoogleDriveTools(Toolkit):
-    """Toolkit for downloading and managing Google Drive documents.
+    """Toolkit for retrieving content from Google Drive documents.
 
-    This version accepts OAuth credentials directly, allowing per-user
-    credential management without relying on file-based token storage.
+    Supports both direct OAuth credentials and database-backed token storage.
+    Returns document content as strings. Documents are returned as markdown,
+    spreadsheets as CSV, and presentations as plain text.
     """
 
     def __init__(
         self,
-        credentials: Credentials,
-        workspace_dir: Path | None = None,
+        credentials: Credentials | None = None,
+        token_storage: "TokenStorage | None" = None,
+        user_id: str | None = None,
         **kwargs,
     ):
         """Initialize Google Drive toolkit with OAuth credentials.
 
+        Supports two authentication modes:
+        1. Direct: Provide credentials directly
+        2. Database: Provide token_storage and user_id to fetch from database
+
         Args:
-            credentials: Google OAuth2 credentials (from token exchange)
-            workspace_dir: Directory to save downloaded files (defaults to ./workspace)
+            credentials: Google OAuth2 credentials (required if not using database)
+            token_storage: TokenStorage instance for database-backed authentication
+            user_id: User ID to fetch credentials from database (requires token_storage)
             **kwargs: Additional arguments passed to parent Toolkit
+
+        Raises:
+            ValueError: If neither direct credentials nor database credentials are provided
         """
-        self.workspace_dir = workspace_dir or Path("./workspace")
-        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        # Load credentials from database if token_storage and user_id provided
+        if token_storage and user_id:
+            logger.debug(f"Loading Google Drive credentials from database for user {user_id}")
+            credentials = token_storage.get_gdrive_credentials(user_id)
 
-        # Set up Google Drive exporter configuration
-        config = GoogleDriveExporterConfig(
-            target_directory=self.workspace_dir,
-            export_format="md",  # Default to markdown for Google Docs
-        )
+            if credentials:
+                logger.info(f"Loaded Google Drive credentials from database for user {user_id}")
+            else:
+                raise ValueError(
+                    f"No Google Drive credentials found in database for user {user_id}"
+                )
 
-        # Create exporter with pre-authenticated credentials
-        self.exporter = GoogleDriveExporter(config=config, credentials=credentials)
+        # Otherwise use direct credentials
+        elif credentials:
+            logger.debug("Using directly provided Google Drive credentials")
+
+        else:
+            raise ValueError("Must provide either credentials or (token_storage + user_id)")
+
+        # Create exporter with pre-authenticated credentials (no file storage needed)
+        self.exporter = GoogleDriveExporter(credentials=credentials)
 
         tools: list[Any] = [
-            self.download_document,
-            self.download_multiple_documents,
-            self.list_supported_formats,
+            self.get_document_content,
             self.get_user_info,
-            self.extract_document_id,
         ]
 
         super().__init__(name="gdrive_tools", tools=tools, **kwargs)
 
-    def download_document(
-        self, url_or_id: str, format: str = "md", output_name: str | None = None
-    ) -> str:
-        """Download a Google Drive document to the workspace directory.
+    def get_document_content(self, url_or_id: str) -> str:
+        """Get content from a Google Drive document.
+
+        Automatically handles different document types:
+        - Google Docs: Returns as markdown
+        - Google Sheets: Returns as CSV
+        - Google Slides: Returns as plain text
 
         Args:
             url_or_id: Google Drive URL or document ID
-            format: Export format (pdf, docx, html, md, txt, csv, xlsx, pptx, etc.)
-                - defaults to 'md'
-            output_name: Optional custom output name (without extension)
 
         Returns:
-            Success message with file paths or error message
+            Document content as string, or error message if retrieval fails
         """
         try:
-            logger.info(f"Downloading Google Drive document: {url_or_id}")
+            logger.info(f"Retrieving Google Drive document content: {url_or_id}")
 
-            # Set the export format in the config
-            original_format = self.exporter.config.export_format
-            # Type ignore needed as format parameter is more flexible than the Literal type
-            self.exporter.config.export_format = format  # type: ignore[assignment]
+            # Get document content with automatic format detection
+            content = self.exporter.get_document_content_as_string(url_or_id, format_key=None)
 
-            try:
-                # Download the document
-                exported_files = self.exporter.export_document(url_or_id, output_name=output_name)
+            if content is None:
+                return f"Failed to retrieve document content: {url_or_id}"
 
-                if not exported_files:
-                    return f"Failed to download document: {url_or_id}"
-
-                # Format the response
-                file_list = []
-                for fmt, path in exported_files.items():
-                    file_list.append(f"  {fmt}: {path}")
-
-                result = "Successfully downloaded document to workspace:\n" + "\n".join(file_list)
-                logger.info(result)
-                return result
-
-            finally:
-                # Restore original format
-                self.exporter.config.export_format = original_format
+            logger.info(f"Successfully retrieved document content ({len(content)} characters)")
+            return content
 
         except Exception as e:
-            error_msg = f"Error downloading document {url_or_id}: {e}"
-            logger.error(error_msg)
-            return error_msg
-
-    def download_multiple_documents(self, urls_or_ids: list[str], format: str = "md") -> str:
-        """Download multiple Google Drive documents to the workspace directory.
-
-        Args:
-            urls_or_ids: List of Google Drive URLs or document IDs
-            format: Export format for all documents - defaults to 'md' for Google Docs
-
-        Returns:
-            Summary of download results
-        """
-        try:
-            logger.info(f"Downloading {len(urls_or_ids)} Google Drive documents")
-
-            # Set the export format
-            original_format = self.exporter.config.export_format
-            # Type ignore needed as format parameter is more flexible than the Literal type
-            self.exporter.config.export_format = format  # type: ignore[assignment]
-
-            try:
-                results = self.exporter.export_multiple(urls_or_ids)
-
-                success_count = len(results)
-                total_count = len(urls_or_ids)
-
-                result_lines = [f"Download completed: {success_count}/{total_count} documents"]
-
-                for doc_id, files in results.items():
-                    result_lines.append(f"\nDocument {doc_id}:")
-                    for fmt, path in files.items():
-                        result_lines.append(f"  {fmt}: {path}")
-
-                result = "\n".join(result_lines)
-                logger.info(result)
-                return result
-
-            finally:
-                # Restore original format
-                self.exporter.config.export_format = original_format
-
-        except Exception as e:
-            error_msg = f"Error downloading multiple documents: {e}"
-            logger.error(error_msg)
-            return error_msg
-
-    def list_supported_formats(self, document_type: str = "document") -> str:
-        """List supported export formats for different document types.
-
-        Args:
-            document_type: Type of document (document, spreadsheet, presentation)
-
-        Returns:
-            JSON formatted list of supported formats
-        """
-        try:
-            if document_type.lower() == "spreadsheet":
-                formats = self.exporter.SPREADSHEET_EXPORT_FORMATS
-            elif document_type.lower() == "presentation":
-                formats = self.exporter.PRESENTATION_EXPORT_FORMATS
-            else:
-                formats = self.exporter.DOCUMENT_EXPORT_FORMATS
-
-            format_info = {}
-            for key, fmt in formats.items():
-                format_info[key] = {
-                    "extension": fmt.extension,
-                    "mime_type": fmt.mime_type,
-                    "description": fmt.description,
-                }
-
-            result = {
-                "document_type": document_type,
-                "supported_formats": format_info,
-            }
-
-            return json.dumps(result, indent=2)
-
-        except Exception as e:
-            error_msg = f"Error listing formats for {document_type}: {e}"
+            error_msg = f"Error retrieving document {url_or_id}: {e}"
             logger.error(error_msg)
             return error_msg
 
@@ -209,23 +131,5 @@ class GoogleDriveTools(Toolkit):
 
         except Exception as e:
             error_msg = f"Error getting user info: {e}"
-            logger.error(error_msg)
-            return error_msg
-
-    def extract_document_id(self, url: str) -> str:
-        """Extract document ID from a Google Drive URL.
-
-        Args:
-            url: Google Drive URL
-
-        Returns:
-            Document ID or error message
-        """
-        try:
-            doc_id = self.exporter.extract_document_id(url)
-            return f"Document ID: {doc_id}"
-
-        except Exception as e:
-            error_msg = f"Error extracting document ID from {url}: {e}"
             logger.error(error_msg)
             return error_msg
