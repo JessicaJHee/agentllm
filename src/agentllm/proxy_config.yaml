@@ -50,7 +50,7 @@ litellm_settings:
   # Register custom Agno provider handler
   custom_provider_map:
     - provider: "agno"
-      custom_handler: custom_handler.agno_handler
+      custom_handler: agentllm.custom_handler.agno_handler
 
 # Server settings
 server:
