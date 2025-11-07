@@ -2,7 +2,7 @@ services:
   litellm-proxy:
     build:
       context: .
-      dockerfile: Dockerfile.local
+      dockerfile: Dockerfile
     container_name: litellm-proxy
     ports:
       - "8890:8890"

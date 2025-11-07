@@ -1,5 +1,5 @@
-# Local development Dockerfile for LiteLLM Proxy with Agno Custom Handler
-# Optimized for fast rebuilds and development workflow
+# Dockerfile for LiteLLM Proxy with Agno Custom Handler
+# Works for both production and local development
 
 FROM python:3.11-slim
 
@@ -34,12 +34,9 @@ RUN uv pip install --system --no-cache \
 # Create directories for data persistence
 RUN mkdir -p /app/tmp/gdrive_workspace
 
-# Create a minimal package structure (will be overridden by volume mount)
-# This ensures the package exists during startup before volume is fully mounted
-RUN mkdir -p /app/agentllm && touch /app/agentllm/__init__.py
-
-# Note: Application code is mounted as a volume in docker-compose
-# This allows for hot-reloading during development
+# Copy application source code
+COPY custom_handler.py /app/
+COPY src/agentllm /app/agentllm
 
 # Set Python environment
 ENV PYTHONPATH=/app
