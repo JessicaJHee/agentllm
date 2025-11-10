@@ -412,7 +412,7 @@ lsof -i :8890
 
 ## License
 
-[Your License Here]
+GPL-3.0-only
 
 ## References
 
