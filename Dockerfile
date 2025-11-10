@@ -37,6 +37,7 @@ RUN mkdir -p /app/tmp/gdrive_workspace
 # Copy application source code
 COPY custom_handler.py /app/
 COPY src/agentllm /app/agentllm
+COPY proxy_config.yaml /app/proxy_config.yaml
 
 # Set Python environment
 ENV PYTHONPATH=/app

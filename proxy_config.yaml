@@ -48,9 +48,11 @@ litellm_settings:
   success_callback: []
   failure_callback: []
   # Register custom Agno provider handler
+  # Handler path is relative to config location (project root)
+  # The stub file custom_handler.py imports from src/agentllm/custom_handler.py
   custom_provider_map:
     - provider: "agno"
-      custom_handler: agentllm.custom_handler.agno_handler
+      custom_handler: custom_handler.agno_handler
 
 # Server settings
 server:
