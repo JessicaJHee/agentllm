@@ -16,28 +16,19 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Set working directory
 WORKDIR /app
 
-# Copy only dependency files first (for layer caching)
-COPY pyproject.toml ./
+# add the application code
+ADD . /app
 
 # Install dependencies from pyproject.toml (not editable, just deps)
-RUN uv pip install --system --no-cache \
-    agno>=2.2.8 \
-    jira>=3.0.0 \
-    litellm[proxy]>=1.79.1 \
-    loguru>=0.7.0 \
-    sqlalchemy>=2.0.0 \
-    google-genai>=0.2.0 \
-    google-auth-oauthlib>=1.0.0 \
-    google-api-python-client>=2.0.0 \
-    html-to-markdown>=1.0.0
+RUN uv sync --locked --no-dev
 
 # Create directories for data persistence
 RUN mkdir -p /app/tmp/gdrive_workspace
 
 # Copy application source code
 COPY custom_handler.py /app/
+COPY proxy_config.yaml /app/
 COPY src/agentllm /app/agentllm
-COPY proxy_config.yaml /app/proxy_config.yaml
 
 # Set Python environment
 ENV PYTHONPATH=/app
@@ -45,6 +36,12 @@ ENV PYTHONUNBUFFERED=1
 
 # Expose LiteLLM proxy port
 EXPOSE 8890
+
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Reset the entrypoint, don't invoke `uv`
+ENTRYPOINT []
 
 # Run LiteLLM proxy
 CMD ["litellm", "--config", "/app/proxy_config.yaml", "--port", "8890", "--host", "0.0.0.0"]

@@ -28,17 +28,20 @@ This project implements a LiteLLM custom provider for Agno agents, allowing you 
 ## Installation
 
 1. Clone this repository:
+
 ```bash
 git clone <repo-url>
 cd agentllm
 ```
 
 2. Install dependencies with uv:
+
 ```bash
 uv sync
 ```
 
 3. Configure environment variables:
+
 ```bash
 cp .env.example .env
 # Edit .env and add your GEMINI_API_KEY
@@ -82,7 +85,7 @@ uv run pytest tests/test_custom_handler.py::TestAgnoCustomLLM -v
 nox -s proxy
 
 # Or manually:
-uv run litellm --config src/agentllm/proxy_config.yaml --port 8890
+uv run litellm --config proxy_config.yaml --port 8890
 ```
 
 ### Making Requests
@@ -104,13 +107,24 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 ### Available Models
 
 **Agno Agents** (powered by Gemini 2.5 Flash):
+
 - `agno/release-manager` - Release management assistant for software releases, changelogs, and version planning
 
 **Direct Gemini 2.5 Models:**
+
 - `gemini-2.5-pro` - Most capable model
 - `gemini-2.5-flash` - Fast and efficient (used by Agno agents)
 
-> **Note:** All models require a single `GEMINI_API_KEY` in your `.env` file. Get your API key from [Google AI Studio](https://aistudio.google.com/apikey).
+You could also use the following command, to list available models currently registered in the LiteLLM proxy:
+
+```bash
+curl -X 'GET' \
+  'http://127.0.0.1:8890/v1/models' \
+  -H "Authorization: Bearer sk-agno-test-key-12345" \
+  -H 'accept: application/json'
+```
+
+> **Note:** gemini models and agno/release-manager require a single `GEMINI_API_KEY` in your `.env` file. Get your API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ## How It Works
 
@@ -132,6 +146,7 @@ This is the **recommended approach** from LiteLLM for adding custom providers wi
 ### Implementation
 
 The provider extends `litellm.CustomLLM` base class and implements:
+
 - `completion()` - Synchronous completions
 - `streaming()` - Streaming responses
 - `acompletion()` - Async completions (future enhancement)
@@ -231,12 +246,14 @@ nox -s dev_local_proxy
 ```
 
 **How it works:**
+
 - Proxy runs locally with instant code reloading
 - Open WebUI runs in Docker and connects to proxy via `http://host.docker.internal:8890/v1`
 - Works on all platforms (Mac, Linux, Windows)
 - Configuration in `.env`: `LITELLM_PROXY_URL=http://host.docker.internal:8890/v1`
 
 **Advantages:**
+
 - ✨ Instant code reloading for proxy changes
 - 🐛 Easy debugging with local debuggers
 - 📊 Direct log access in terminal
@@ -257,11 +274,13 @@ nox -s dev_full -- -d
 ```
 
 **How it works:**
+
 - Both LiteLLM proxy and Open WebUI run in Docker
 - Services communicate via internal Docker network
 - Matches production deployment architecture
 
 **Advantages:**
+
 - 🏭 Production-like environment
 - 🐳 Tests full Docker setup
 - 👥 Easier for non-Python developers
@@ -269,6 +288,7 @@ nox -s dev_full -- -d
 ### Quick Start
 
 1. **Configure environment**:
+
    ```bash
    cp .env.example .env
    # Edit .env and add your GEMINI_API_KEY
@@ -277,6 +297,7 @@ nox -s dev_full -- -d
 2. **Choose your mode and start**:
 
    For development mode:
+
    ```bash
    # Terminal 1
    nox -s proxy
@@ -285,12 +306,13 @@ nox -s dev_full -- -d
    ```
 
    For production mode:
+
    ```bash
    nox -s dev_full
    ```
 
 3. **Access Open WebUI**:
-   - Open your browser to http://localhost:3000
+   - Open your browser to <http://localhost:3000>
    - Create an account (first user becomes admin)
    - The Agno models will be automatically available!
 
@@ -339,12 +361,14 @@ See `.env.example` for all configuration options. Key variables include:
 ### Proxy Configuration
 
 Edit `src/agentllm/proxy_config.yaml` to:
+
 - Add/remove agent models (Agno agents, Gemini, or other LLM providers)
 - Change authentication settings
 - Configure logging
 - Adjust server settings
 
 The proxy already includes configurations for:
+
 - **Agno agents** (custom agents with specialized behaviors)
 - **Google Gemini 2.5 models** (gemini-2.5-pro, gemini-2.5-flash)
 
@@ -365,6 +389,7 @@ The Agno provider extends `litellm.CustomLLM` and implements:
 LiteLLM's `CustomLLM` requires streaming methods to return `GenericStreamingChunk` dictionaries, **not** `ModelResponse` objects. The key format requirements:
 
 **GenericStreamingChunk Format:**
+
 ```python
 {
     "text": "content here",           # Use "text", not "content" or "delta"
@@ -399,6 +424,7 @@ Ensure you have set `GEMINI_API_KEY` in your `.env` file. Get your key from [Goo
 ### Proxy Won't Start
 
 Check that port 8890 is available:
+
 ```bash
 lsof -i :8890
 ```
@@ -407,7 +433,7 @@ lsof -i :8890
 
 1. Write tests for new features
 2. Follow TDD workflow
-3. Run `nox -s lint` and `nox -s format`
+3. Run `make lint` and `make format`
 4. Update documentation
 
 ## License

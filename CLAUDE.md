@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 AgentLLM is a LiteLLM custom provider that exposes Agno agents through an OpenAI-compatible API. It enables seamless integration with Open WebUI and other OpenAI-compatible clients using LiteLLM's official `CustomLLM` extension mechanism.
 
 **Architecture Flow:**
+
 ```
 [Client] -> [LiteLLM Proxy :8890] -> [Agno Provider] -> [Agno Agent] -> [Gemini API]
 ```
@@ -14,6 +15,7 @@ AgentLLM is a LiteLLM custom provider that exposes Agno agents through an OpenAI
 ## Development Commands
 
 ### Testing
+
 ```bash
 # Run unit tests
 nox -s test
@@ -29,6 +31,7 @@ uv run pytest tests/test_release_manager.py -v
 ```
 
 ### Running the Proxy
+
 ```bash
 # Start LiteLLM proxy locally
 nox -s proxy
@@ -42,6 +45,7 @@ uv run litellm --config proxy_config.yaml --port 8890
 The project supports two development modes to accommodate different workflows:
 
 ### Development Mode (Recommended for Day-to-Day Work)
+
 **Use case:** Fast iteration on proxy/agent code with live debugging
 
 Run the LiteLLM proxy locally and Open WebUI in a container:
@@ -55,18 +59,21 @@ nox -s dev_local_proxy
 ```
 
 **How it works:**
+
 - `LITELLM_PROXY_URL` in `.env` is set to `http://host.docker.internal:8890/v1`
 - Open WebUI (containerized) connects to proxy on host machine
 - Works on all platforms (Mac, Linux, Windows) via `extra_hosts` configuration
 - Enables fast iteration: edit code → proxy reloads → test immediately
 
 **Advantages:**
+
 - Instant code reloading for proxy changes
 - Easy debugging with local debuggers
 - Direct log access in terminal
 - Lower resource usage (one less container)
 
 ### Production Mode (Full Container Stack)
+
 **Use case:** Testing the complete containerized setup or when not modifying proxy code
 
 Run both services in containers:
@@ -80,16 +87,19 @@ nox -s dev_full -- -d
 ```
 
 **How it works:**
+
 - Overrides `LITELLM_PROXY_URL` to `http://litellm-proxy:8890/v1`
 - Both services run in Docker network
 - Matches production deployment architecture
 
 **Advantages:**
+
 - Production-like environment
 - Tests full Docker setup
 - Easier for non-Python developers
 
 ### Common Docker Commands
+
 ```bash
 # View logs from containers
 nox -s dev-logs                    # All services
@@ -118,19 +128,22 @@ LITELLM_PROXY_URL=http://litellm-proxy:8890/v1
 ```
 
 **No manual configuration needed** - just use the appropriate `nox` command:
+
 - `nox -s dev_local_proxy` - Uses value from `.env` (development mode)
 - `nox -s dev_full` - Automatically overrides to container mode
 
 ### Code Quality
+
 ```bash
 # Run linting
-nox -s lint
+make lint
 
 # Format code
 nox -s format
 ```
 
 ### Making Test Requests
+
 ```bash
 # Test proxy health
 nox -s hello
@@ -150,6 +163,7 @@ litellm_settings:
 ```
 
 **Key Implementation:** `src/agentllm/custom_handler.py`
+
 - Extends `litellm.CustomLLM` base class
 - Implements: `completion()`, `streaming()`, `acompletion()`, `astreaming()`
 - Manages agent caching per (agent_name, temperature, max_tokens, user_id)
@@ -160,6 +174,7 @@ litellm_settings:
 LiteLLM loads custom handlers using **file-based resolution** relative to the config file location, not Python module imports. This requires a specific project structure:
 
 **File Layout:**
+
 ```
 project_root/
 ├── proxy_config.yaml          # Config at root (required by LiteLLM)
@@ -171,11 +186,13 @@ project_root/
 **Why This Pattern:**
 
 LiteLLM's `get_instance_fn()` constructs file paths relative to the config directory:
+
 - Config at root → looks for `./custom_handler.py`
 - Handler reference: `custom_handler.agno_handler`
 - Stub imports from actual implementation: `from agentllm.custom_handler import agno_handler`
 
 **Docker Layout:**
+
 ```
 /app/
 ├── proxy_config.yaml
@@ -183,6 +200,7 @@ LiteLLM's `get_instance_fn()` constructs file paths relative to the config direc
 ├── agentllm/
 │   └── custom_handler.py       # Actual implementation
 ```
+
 - Same pattern as local dev, ensures consistency across environments
 
 This pattern ensures compatibility across local development and Docker environments while keeping code organized.
@@ -190,6 +208,7 @@ This pattern ensures compatibility across local development and Docker environme
 ### Agent Architecture
 
 **ReleaseManager Wrapper Pattern** (`src/agentllm/agents/release_manager.py`):
+
 - Wraps Agno `Agent` instances with configuration management
 - Maintains per-user agents with toolkit isolation
 - Intercepts `run()` and `arun()` calls to handle toolkit configuration
@@ -200,6 +219,7 @@ This pattern ensures compatibility across local development and Docker environme
   4. Invalidate and recreate agents when new tools are authorized
 
 **Session Management:**
+
 - Shared SQLite database: `tmp/agno_sessions.db`
 - Enables conversation history via `db=shared_db`
 - Session/user context extracted from OpenWebUI headers
@@ -207,6 +227,7 @@ This pattern ensures compatibility across local development and Docker environme
 ### Toolkit Configuration System
 
 **Base Architecture** (`src/agentllm/agents/toolkit_configs/base.py`):
+
 - Abstract `BaseToolkitConfig` class for service-agnostic toolkit management
 - Each toolkit implements:
   - `is_configured()` - Check if user has configured this toolkit
@@ -217,16 +238,19 @@ This pattern ensures compatibility across local development and Docker environme
   - `get_agent_instructions()` - Provide toolkit-specific instructions
 
 **Toolkit Types:**
+
 - **Required:** Prompt immediately on first use (e.g., Google Drive)
 - **Optional:** Only prompt when user mentions toolkit features (e.g., Jira)
 
 **Current Implementations:**
+
 - `GoogleDriveConfig` - OAuth-based Google Drive access
 - `JiraConfig` - API token-based Jira access
 
 ### Token Storage
 
 **Centralized Credential Storage** (`src/agentllm/db/token_storage.py`):
+
 - SQLite-backed storage for OAuth credentials and API tokens
 - Reuses Agno's `SqliteDb` engine for single database
 - Tables: `jira_tokens`, `gdrive_tokens`
@@ -248,6 +272,7 @@ LiteLLM's `CustomLLM` requires **GenericStreamingChunk format** (not `ModelRespo
 ```
 
 **Implementation:**
+
 - Sync streaming (`streaming()`): Returns complete response as single chunk
 - Async streaming (`astreaming()`): True real-time streaming using `agent.arun(stream=True)`
 
@@ -274,6 +299,7 @@ src/agentllm/
 ## Adding New Agents
 
 1. Create agent file in `src/agentllm/agents/`:
+
 ```python
 from agno.agent import Agent
 from agno.models.google import Gemini
@@ -300,6 +326,7 @@ def create_my_agent(temperature=None, max_tokens=None, **kwargs):
 2. Update `custom_handler.py` to import and instantiate new agent
 
 3. Add to `proxy_config.yaml`:
+
 ```yaml
 - model_name: agno/my-agent
   litellm_params:
@@ -310,7 +337,8 @@ def create_my_agent(temperature=None, max_tokens=None, **kwargs):
 ## Environment Setup
 
 Required environment variables (see `.env.example`):
-- `GEMINI_API_KEY` - Required for all models (get from https://aistudio.google.com/apikey)
+
+- `GEMINI_API_KEY` - Required for all models (get from <https://aistudio.google.com/apikey>)
 - `LITELLM_MASTER_KEY` - API key for proxy access (default: `sk-agno-test-key-12345`)
 
 ## Key Implementation Details
@@ -318,6 +346,7 @@ Required environment variables (see `.env.example`):
 ### Session Context Extraction
 
 Session/user context is extracted from multiple sources (priority order):
+
 1. Request body metadata (from OpenWebUI pipe functions)
 2. OpenWebUI headers (`X-OpenWebUI-User-Id`, `X-OpenWebUI-Chat-Id`)
 3. LiteLLM metadata
@@ -343,6 +372,7 @@ See `_extract_session_info()` in `custom_handler.py`
 ## Testing Approach
 
 Project follows Test-Driven Development (TDD):
+
 1. Write failing test
 2. Implement feature
 3. Run tests: `nox -s test`
@@ -353,13 +383,16 @@ Project follows Test-Driven Development (TDD):
 This project uses **uv** for dependency management. Always use `uv run` or `uv sync` for Python commands.
 
 ## Context7 Documentation Server
+
 **When to use:**
+
 - Working with external libraries/frameworks
 - Implementing new integrations or features with third-party tools
 - Need current documentation beyond training cutoff
 - Troubleshooting library-specific issues
 
 Libraries in this project:
+
 - Agno: mcp__context7__get_library_docs(context7CompatibleLibraryID="/websites/agno")
 - LiteLLM: mcp__context7__get_library_docs(context7CompatibleLibraryID="/berriai/litellm")
 - OpenWebUI: mcp__context7__get_library_docs(context7CompatibleLibraryID="/websites/openwebui")

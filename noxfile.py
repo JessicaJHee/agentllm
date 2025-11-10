@@ -45,18 +45,6 @@ def proxy(session):
 
 
 @nox.session(venv_backend="none")
-def lint(session):
-    """Run linting with ruff."""
-    session.run("uv", "run", "ruff", "check", "src/", "tests/", external=True)
-
-
-@nox.session(venv_backend="none")
-def format(session):
-    """Format code with ruff."""
-    session.run("uv", "run", "ruff", "format", "src/", "tests/", external=True)
-
-
-@nox.session(venv_backend="none")
 def hello(session):
     """Make a hello world request to the proxy (proxy must be running)."""
     import json
@@ -80,9 +68,7 @@ def hello(session):
 
     # Test 1: Health check
     print("2️⃣  Testing /health endpoint...")
-    result = subprocess.run(
-        ["curl", "-s", "http://localhost:8890/health"], capture_output=True, text=True
-    )
+    result = subprocess.run(["curl", "-s", "http://localhost:8890/health"], capture_output=True, text=True)
     print(f"   Response: {result.stdout}\n")
 
     # Test 2: List models
@@ -131,10 +117,7 @@ def hello(session):
     )
 
     print("   Request:")
-    print(
-        '   {"model": "agno/release-manager", '
-        '"messages": [{"role": "user", "content": "Hello from nox!"}]}'
-    )
+    print('   {"model": "agno/release-manager", "messages": [{"role": "user", "content": "Hello from nox!"}]}')
     print("\n   Response:")
     try:
         data = json.loads(result.stdout)
