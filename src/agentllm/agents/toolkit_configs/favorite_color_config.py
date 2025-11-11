@@ -10,6 +10,8 @@ from typing import Any
 
 from loguru import logger
 
+from agentllm.utils.logging import safe_log_content
+
 from .base import BaseToolkitConfig
 
 
@@ -114,7 +116,7 @@ class FavoriteColorConfig(BaseToolkitConfig):
         """
         logger.debug("=" * 80)
         logger.info(f">>> extract_and_store_config() STARTED - user_id={user_id}")
-        logger.debug(f"Message to analyze: {message[:100]}...")
+        logger.debug(safe_log_content(message, "Message to analyze"))
 
         # Try to extract color using regex patterns
         color = self._extract_color_from_message(message)

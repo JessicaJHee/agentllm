@@ -18,6 +18,7 @@ from agno.models.google import Gemini
 from loguru import logger
 
 from agentllm.agents.toolkit_configs.base import BaseToolkitConfig
+from agentllm.utils.logging import safe_log_content
 
 
 class BaseAgentWrapper(ABC):
@@ -296,7 +297,7 @@ class BaseAgentWrapper(ABC):
                 confirmation = config.extract_and_store_config(message, user_id)
                 if confirmation:
                     logger.info(f"✅ {config_name} extracted and stored configuration")
-                    logger.debug(f"Confirmation message: {confirmation[:100]}...")
+                    logger.debug(safe_log_content(confirmation, "Confirmation message"))
 
                     # Invalidate cached agent so it's recreated with new toolkit
                     if self._agent is not None:

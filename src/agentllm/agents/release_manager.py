@@ -147,6 +147,28 @@ class ReleaseManager(BaseAgentWrapper):
             "- If configured, you will be informed of the external prompt document URL in your extended instructions",
         ]
 
+    def _build_model_params(self) -> dict:
+        """
+        Override to configure Gemini with native thinking capability.
+
+        This extends the base model params by adding:
+        - thinking_budget: Allocate tokens for thinking
+        - include_thoughts: Request thought summaries in response
+
+        These params get passed to Gemini(**model_params) in base agent.
+
+        Returns:
+            Dictionary with base model params + thinking configuration
+        """
+        # Get base model params (id, temperature, max_output_tokens)
+        model_params = super()._build_model_params()
+
+        # Add Gemini native thinking parameters
+        model_params["thinking_budget"] = 200  # Allocate up to 200 tokens for thinking
+        model_params["include_thoughts"] = True  # Request thought summaries in response
+
+        return model_params
+
     def _on_config_stored(self, config: BaseToolkitConfig, user_id: str) -> None:
         """
         Handle cross-config dependencies when configuration is stored.

@@ -15,6 +15,7 @@ from loguru import logger
 from agentllm.agents.demo_agent import DemoAgent
 from agentllm.agents.release_manager import ReleaseManager
 from agentllm.db import TokenStorage
+from agentllm.utils.logging import safe_log_content
 
 # Configure logging for our custom handler using loguru
 # Remove default handler
@@ -227,7 +228,7 @@ class AgnoCustomLLM(CustomLLM):
             ModelResponse object
         """
         logger.info(f"_build_response() called for model={model}, content_length={len(content)}")
-        logger.debug(f"Content being added to response: {content[:500]}")  # First 500 chars
+        logger.debug(safe_log_content(content, "Content being added to response"))
 
         message = Message(role="assistant", content=content)
         logger.debug(f"Created Message object: role={message.role}, content_length={len(message.content) if message.content else 0}")
@@ -323,8 +324,7 @@ class AgnoCustomLLM(CustomLLM):
         content = response.content if hasattr(response, "content") else str(response)
         logger.info(f"Extracted content length: {len(content) if content else 0}")
         logger.info(f"Content type: {type(content)}")
-        logger.info(f"Content value (first 200 chars): {str(content)[:200] if content else 'None'}")
-        logger.debug(f"Full content value: {content}")
+        logger.info(safe_log_content(content, "Content value"))
         logger.debug(f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}")
 
         result = self._build_response(model, str(content))
@@ -437,8 +437,7 @@ class AgnoCustomLLM(CustomLLM):
         content = response.content if hasattr(response, "content") else str(response)
         logger.info(f"Extracted content length: {len(content) if content else 0}")
         logger.info(f"Content type: {type(content)}")
-        logger.info(f"Content value (first 200 chars): {str(content)[:200] if content else 'None'}")
-        logger.debug(f"Full content value: {content}")
+        logger.info(safe_log_content(content, "Content value"))
         logger.debug(f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}")
 
         result = self._build_response(model, str(content))
