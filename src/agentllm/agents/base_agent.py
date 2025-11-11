@@ -871,44 +871,29 @@ class BaseAgentWrapper(ABC):
                         }
 
                     elif isinstance(chunk, ToolCallStartedEvent):
-                        # Tool call is starting - send formatted text
+                        # Tool call is starting - just log it, don't yield yet
                         if hasattr(chunk, "tool") and chunk.tool:
                             tool = chunk.tool
                             tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
                             tool_args = tool.tool_args if hasattr(tool, "tool_args") else {}
 
                             logger.info(f"🔧 ToolCallStartedEvent #{chunk_count}: {tool_name}({json.dumps(tool_args)})")
-
-                            # Format tool call as visible text (similar to Gemini's reasoning blocks)
-                            args_json = json.dumps(tool_args, indent=2) if tool_args else "{}"
-                            tool_call_text = f'\n<details type="tool_call" open="true">\n<summary>🔧 Tool: {tool_name}</summary>\n\n```json\n{args_json}\n```\n\n'
-
-                            yield {
-                                "text": tool_call_text,
-                                "finish_reason": None,
-                                "index": 0,
-                                "is_finished": False,
-                                "tool_use": None,
-                                "usage": {
-                                    "completion_tokens": 0,
-                                    "prompt_tokens": 0,
-                                    "total_tokens": 0,
-                                },
-                            }
                         else:
                             logger.warning(f"ToolCallStartedEvent #{chunk_count} has no tool attribute, skipping")
 
                     elif isinstance(chunk, ToolCallCompletedEvent):
-                        # Tool call completed - show result and close the details block
+                        # Tool call completed - show COMPLETE details block with args and result
                         if hasattr(chunk, "tool") and chunk.tool:
                             tool = chunk.tool
                             tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
+                            tool_args = tool.tool_args if hasattr(tool, "tool_args") else {}
                             tool_result = tool.result if hasattr(tool, "result") else "No result"
 
                             logger.info(f"✅ ToolCallCompletedEvent #{chunk_count}: {tool_name} → {str(tool_result)[:100]}")
 
-                            # Include the tool result in the details block
-                            completion_text = f"**Result:**\n\n{tool_result}\n\n✅ Completed\n</details>\n\n"
+                            # Format complete tool call block (args + result)
+                            args_json = json.dumps(tool_args, indent=2) if tool_args else "{}"
+                            completion_text = f'\n<details type="tool_call" open="true">\n<summary>🔧 Tool: {tool_name}</summary>\n\n**Arguments:**\n```json\n{args_json}\n```\n\n**Result:**\n\n{tool_result}\n\n✅ Completed\n</details>\n\n'
 
                             yield {
                                 "text": completion_text,
