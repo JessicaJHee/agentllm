@@ -12,6 +12,7 @@ from litellm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 from loguru import logger
 
+from agentllm.agents.demo_agent import DemoAgent
 from agentllm.agents.release_manager import ReleaseManager
 
 # Configure logging for our custom handler using loguru
@@ -105,9 +106,7 @@ class AgnoCustomLLM(CustomLLM):
         # 3. Check LiteLLM metadata
         if not session_id and "litellm_params" in kwargs:
             litellm_metadata = litellm_params.get("metadata", {})
-            session_id = litellm_metadata.get("session_id") or litellm_metadata.get(
-                "conversation_id"
-            )
+            session_id = litellm_metadata.get("session_id") or litellm_metadata.get("conversation_id")
             if session_id:
                 logger.info(f"[3/4] Found in LiteLLM metadata: session_id={session_id}")
 
@@ -124,12 +123,8 @@ class AgnoCustomLLM(CustomLLM):
         if not session_id and not user_id:
             logger.warning("⚠ No session/user info found! Logging full request structure:")
             logger.warning(f"Headers available: {list(headers.keys()) if headers else 'None'}")
-            logger.warning(
-                f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}"
-            )
-            logger.warning(
-                f"LiteLLM metadata keys: {list(litellm_params.get('metadata', {}).keys())}"
-            )
+            logger.warning(f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}")
+            logger.warning(f"LiteLLM metadata keys: {list(litellm_params.get('metadata', {}).keys())}")
 
         return session_id, user_id
 
@@ -176,8 +171,12 @@ class AgnoCustomLLM(CustomLLM):
             logger.debug("Instantiating ReleaseManager...")
             agent = ReleaseManager(temperature=temperature, max_tokens=max_tokens)
             logger.debug("ReleaseManager instantiated successfully")
+        elif agent_name == "demo-agent":
+            logger.debug("Instantiating DemoAgent...")
+            agent = DemoAgent(temperature=temperature, max_tokens=max_tokens)
+            logger.debug("DemoAgent instantiated successfully")
         else:
-            error_msg = f"Agent '{agent_name}' not found. Only 'release-manager' is available."
+            error_msg = f"Agent '{agent_name}' not found. Available agents: 'release-manager', 'demo-agent'"
             logger.error(error_msg)
             raise Exception(error_msg)
 
@@ -200,9 +199,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.debug(f"Content being added to response: {content[:500]}")  # First 500 chars
 
         message = Message(role="assistant", content=content)
-        logger.debug(
-            f"Created Message object: role={message.role}, content_length={len(message.content) if message.content else 0}"
-        )
+        logger.debug(f"Created Message object: role={message.role}, content_length={len(message.content) if message.content else 0}")
 
         choice = Choices(finish_reason="stop", index=0, message=message)
         logger.debug(f"Created Choices object with finish_reason={choice.finish_reason}")
@@ -216,17 +213,13 @@ class AgnoCustomLLM(CustomLLM):
             "total_tokens": 0,
         }
 
-        logger.info(
-            f"ModelResponse built: model={model_response.model}, choices_count={len(model_response.choices)}"
-        )
+        logger.info(f"ModelResponse built: model={model_response.model}, choices_count={len(model_response.choices)}")
         logger.debug(
             f"Response first choice content: {model_response.choices[0].message.content[:200] if model_response.choices[0].message.content else 'None'}"
         )
         return model_response
 
-    def _extract_request_params(
-        self, messages: list[dict[str, Any]], kwargs: dict[str, Any]
-    ) -> tuple[str, str | None, str | None]:
+    def _extract_request_params(self, messages: list[dict[str, Any]], kwargs: dict[str, Any]) -> tuple[str, str | None, str | None]:
         """Extract common request parameters.
 
         Args:
@@ -284,9 +277,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.info("Extracting request parameters...")
         # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
-        logger.info(
-            f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}"
-        )
+        logger.info(f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}")
 
         logger.info("Getting agent instance...")
         # Get agent instance (with caching based on user_id)
@@ -303,9 +294,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"Content type: {type(content)}")
         logger.info(f"Content value (first 200 chars): {str(content)[:200] if content else 'None'}")
         logger.debug(f"Full content value: {content}")
-        logger.debug(
-            f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}"
-        )
+        logger.debug(f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}")
 
         result = self._build_response(model, str(content))
         logger.info(f"<<< completion() FINISHED - model={model}")
@@ -340,9 +329,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f">>> streaming() STARTED - model={model}")
         logger.info(f"kwargs: {kwargs}")
 
-        logger.info(
-            "Getting complete response via completion() (sync streaming not fully supported)"
-        )
+        logger.info("Getting complete response via completion() (sync streaming not fully supported)")
         # Get the complete response
         result = self.completion(
             model=model,
@@ -366,9 +353,7 @@ class AgnoCustomLLM(CustomLLM):
             "is_finished": True,
             "tool_use": None,
             "usage": {
-                "completion_tokens": (
-                    result.usage.get("completion_tokens", 0) if result.usage else 0
-                ),
+                "completion_tokens": (result.usage.get("completion_tokens", 0) if result.usage else 0),
                 "prompt_tokens": (result.usage.get("prompt_tokens", 0) if result.usage else 0),
                 "total_tokens": (result.usage.get("total_tokens", 0) if result.usage else 0),
             },
@@ -405,9 +390,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.info("Extracting request parameters...")
         # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
-        logger.info(
-            f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}"
-        )
+        logger.info(f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}")
 
         logger.info("Getting agent instance...")
         # Get agent instance (with caching based on user_id)
@@ -415,9 +398,7 @@ class AgnoCustomLLM(CustomLLM):
 
         logger.info(f"Running agent asynchronously with session_id={session_id}, user_id={user_id}")
         # Run the agent asynchronously with session management
-        response = await agent.arun(
-            user_message, stream=False, session_id=session_id, user_id=user_id
-        )
+        response = await agent.arun(user_message, stream=False, session_id=session_id, user_id=user_id)
         logger.info(f"Agent arun completed, response type: {type(response)}")
 
         # Extract content and build response
@@ -426,9 +407,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.info(f"Content type: {type(content)}")
         logger.info(f"Content value (first 200 chars): {str(content)[:200] if content else 'None'}")
         logger.debug(f"Full content value: {content}")
-        logger.debug(
-            f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}"
-        )
+        logger.debug(f"Response object attributes: {vars(response) if hasattr(response, '__dict__') else dir(response)}")
 
         result = self._build_response(model, str(content))
         logger.info(f"<<< acompletion() FINISHED - model={model}")
@@ -463,9 +442,7 @@ class AgnoCustomLLM(CustomLLM):
         logger.info("Extracting request parameters...")
         # Extract request parameters first (need user_id for agent cache)
         user_message, session_id, user_id = self._extract_request_params(messages, kwargs)
-        logger.info(
-            f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}"
-        )
+        logger.info(f"Extracted: user_message_length={len(user_message)}, session_id={session_id}, user_id={user_id}")
 
         logger.info("Getting agent instance...")
         # Get agent instance (with caching based on user_id)
@@ -484,9 +461,7 @@ class AgnoCustomLLM(CustomLLM):
             chunk_count += 1
             chunk_type = type(chunk).__name__
 
-            logger.debug(
-                f"[custom_handler] Received event #{chunk_count} from ReleaseManager: type={chunk_type}"
-            )
+            logger.debug(f"[custom_handler] Received event #{chunk_count} from ReleaseManager: type={chunk_type}")
 
             # Filter: Only process RunContentEvent (actual content chunks)
             # RunCompletedEvent and other control events are filtered in ReleaseManager
@@ -498,9 +473,7 @@ class AgnoCustomLLM(CustomLLM):
                     logger.debug(f"Skipping empty RunContentEvent #{chunk_count}")
                     continue
 
-                logger.debug(
-                    f"Yielding chunk #{chunk_count} to LiteLLM, content_length={len(content)}"
-                )
+                logger.debug(f"Yielding chunk #{chunk_count} to LiteLLM, content_length={len(content)}")
                 # Yield GenericStreamingChunk format
                 yield {
                     "text": content,
@@ -519,9 +492,7 @@ class AgnoCustomLLM(CustomLLM):
                 # Log non-content events for debugging (these shouldn't reach here if ReleaseManager filters correctly)
                 logger.debug(f"Received non-content event: {chunk_type} (not yielding to LiteLLM)")
 
-        logger.info(
-            f"async for loop over ReleaseManager stream completed, total chunks: {chunk_count}"
-        )
+        logger.info(f"async for loop over ReleaseManager stream completed, total chunks: {chunk_count}")
         logger.info("Sending final chunk with finish_reason=stop")
         # Send final chunk with finish_reason
         yield {
@@ -554,9 +525,7 @@ class AgnoCustomLLM(CustomLLM):
         for idx, message in enumerate(reversed(messages)):
             if message.get("role") == "user":
                 content = message.get("content", "")
-                logger.debug(
-                    f"Found user message at position {len(messages) - idx - 1} (length={len(content)})"
-                )
+                logger.debug(f"Found user message at position {len(messages) - idx - 1} (length={len(content)})")
                 return content
 
         # If no user message found, concatenate all messages

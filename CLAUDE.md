@@ -400,15 +400,18 @@ src/agentllm/
 ├── proxy_config.yaml              # LiteLLM proxy configuration
 ├── agents/
 │   ├── release_manager.py         # ReleaseManager wrapper class
+│   ├── demo_agent.py              # Demo agent wrapper (example)
 │   └── toolkit_configs/
 │       ├── base.py                # Abstract base class
 │       ├── gdrive_config.py       # Google Drive OAuth config
 │       ├── jira_config.py         # Jira API token config
+│       ├── favorite_color_config.py  # Demo: favorite color config
 │       └── system_prompt_extension_config.py  # System prompt extension
 ├── tools/
 │   ├── gdrive_toolkit.py          # Google Drive tools
 │   ├── gdrive_utils.py            # OAuth flow utilities
-│   └── jira_toolkit.py            # Jira tools
+│   ├── jira_toolkit.py            # Jira tools
+│   └── color_toolkit.py           # Demo: color utility tools
 └── db/
     └── token_storage.py           # SQLite token storage
 ```
@@ -450,6 +453,210 @@ def create_my_agent(temperature=None, max_tokens=None, **kwargs):
     model: agno/my-agent
     custom_llm_provider: agno
 ```
+
+## Demo Agent - Example Implementation
+
+The Demo Agent (`agno/demo-agent`) is a simple reference implementation that showcases AgentLLM's key features with extensive logging. It serves as both a functional example and an educational tool for understanding the platform architecture.
+
+### Purpose
+
+The Demo Agent demonstrates:
+- **Required configuration flow**: Users must configure their favorite color before the agent can assist them
+- **Simple utility tools**: Color palette generation and text formatting (no external APIs required)
+- **Extensive logging**: Every operation is logged with DEBUG/INFO markers for traceability
+- **Session memory**: Conversation history persists across interactions
+- **Streaming support**: Both sync and async streaming responses
+- **Per-user isolation**: Configuration and agents are isolated per user
+- **Agent wrapper pattern**: Same ReleaseManager-style architecture
+
+### Architecture
+
+**Components:**
+
+1. **FavoriteColorConfig** (`src/agentllm/agents/toolkit_configs/favorite_color_config.py`)
+   - Required toolkit configuration
+   - Extracts color from natural language: "my favorite color is blue"
+   - Validates against supported colors: red, blue, green, yellow, purple, orange, pink, black, white, brown
+   - Stores configuration in memory (no database needed)
+   - Extensive logging at every step
+
+2. **ColorTools** (`src/agentllm/tools/color_toolkit.py`)
+   - Simple utility toolkit with two tools:
+     - `generate_color_palette()`: Creates complementary/analogous/monochromatic palettes
+     - `format_text_with_theme()`: Formats text with color-themed styling
+   - Pure Python logic (no external API dependencies)
+   - Logging for all tool invocations
+
+3. **DemoAgent** (`src/agentllm/agents/demo_agent.py`)
+   - Wrapper class following ReleaseManager pattern
+   - Manages FavoriteColorConfig as required configuration
+   - Creates per-user agents with ColorTools
+   - Extensive logging throughout execution flow
+   - Session memory enabled (10 message history)
+
+### Configuration Flow
+
+**First Interaction:**
+```
+User: "Hello!"
+Agent: 🎨 Welcome to the Demo Agent!
+       Before we begin, I need to know your favorite color...
+       [Shows supported colors and example patterns]
+```
+
+**Configuration:**
+```
+User: "My favorite color is blue"
+Agent: ✅ Favorite Color Configured!
+       Your favorite color has been set to: blue
+       The demo agent will now use this preference...
+```
+
+**Usage:**
+```
+User: "Generate a color palette for me"
+Agent: [Uses ColorTools to generate complementary palette based on blue]
+
+User: "Format 'Hello World' with an elegant theme"
+Agent: [Uses ColorTools to format text with blue theme]
+```
+
+### Supported Color Patterns
+
+The agent recognizes multiple natural language patterns:
+
+- `"my favorite color is <color>"`
+- `"I like <color>"`
+- `"I love <color>"`
+- `"set color to <color>"`
+- `"color: <color>"` or `"color = <color>"`
+
+### Testing
+
+Comprehensive test suite in `tests/test_demo_agent.py`:
+
+```bash
+# Run all demo agent tests
+uv run pytest tests/test_demo_agent.py -v
+
+# Run specific test class
+uv run pytest tests/test_demo_agent.py::TestFavoriteColorConfiguration -v
+
+# Run with API key (for execution tests)
+GEMINI_API_KEY=your_key uv run pytest tests/test_demo_agent.py::TestAgentExecution -v
+```
+
+**Test Coverage:**
+- Basic instantiation and parameters
+- Configuration extraction (all patterns)
+- Invalid color validation
+- Multi-user isolation
+- Agent caching and invalidation
+- Sync/async execution
+- Streaming responses
+- Tool invocations
+- Session memory
+- Error handling
+- Logging verification
+
+### Using the Demo Agent
+
+**Via LiteLLM Proxy:**
+```bash
+# Start proxy
+nox -s proxy
+
+# Test with curl
+curl -X POST http://localhost:8890/v1/chat/completions \
+  -H "Authorization: Bearer sk-agno-test-key-12345" \
+  -H "Content-Type: application/json" \
+  -H "X-OpenWebUI-User-Id: demo-user" \
+  -d '{
+    "model": "agno/demo-agent",
+    "messages": [{"role": "user", "content": "My favorite color is green"}]
+  }'
+```
+
+**Via OpenWebUI:**
+1. Start development environment: `nox -s dev_local_proxy`
+2. Access OpenWebUI at http://localhost:8080
+3. Select `agno/demo-agent` from model dropdown
+4. Configure favorite color when prompted
+5. Explore palette generation and text formatting tools
+
+### Logging Output
+
+The Demo Agent produces extensive structured logs in `tmp/agno_handler.log`:
+
+```
+2025-01-15 10:15:23.456 | INFO     | DemoAgent.__init__() called
+2025-01-15 10:15:23.457 | DEBUG    | Parameters: temperature=0.7, max_tokens=None
+2025-01-15 10:15:23.458 | INFO     | Initialized 1 toolkit config(s)
+...
+2025-01-15 10:15:24.123 | INFO     | >>> DemoAgent.run() STARTED - user_id=demo-user
+2025-01-15 10:15:24.124 | INFO     | Checking configuration...
+2025-01-15 10:15:24.125 | INFO     | >>> _handle_configuration() STARTED
+2025-01-15 10:15:24.126 | INFO     | ✅ FavoriteColorConfig extracted and stored configuration
+2025-01-15 10:15:24.127 | INFO     | <<< _handle_configuration() FINISHED (config stored)
+...
+```
+
+**Log Levels:**
+- **DEBUG**: Internal flow, cache operations, parameter logging
+- **INFO**: Key operations, state changes, user actions
+- **WARNING**: Validation failures, configuration issues
+- **ERROR**: Exceptions with stack traces
+
+### Educational Value
+
+The Demo Agent is designed as a learning tool:
+
+1. **Code Organization**: Clean separation of concerns (config, tools, agent wrapper)
+2. **Configuration Pattern**: Shows how to implement required vs optional configs
+3. **Tool Creation**: Simple tools without external dependencies
+4. **Logging Best Practices**: Comprehensive logging for debugging and monitoring
+5. **Testing Patterns**: Full test coverage including mocks and fixtures
+6. **Documentation**: Self-documenting code with extensive comments
+
+### Extending the Demo Agent
+
+To add new features:
+
+**Add a new color:**
+```python
+# In favorite_color_config.py
+VALID_COLORS = [
+    "red", "blue", "green", "yellow", "purple",
+    "orange", "pink", "black", "white", "brown",
+    "teal",  # <- Add new color
+]
+```
+
+**Add a new tool:**
+```python
+# In color_toolkit.py
+def analyze_color_psychology(self) -> str:
+    """Analyze psychological aspects of the user's favorite color."""
+    # Implementation...
+```
+
+**Change config to optional:**
+```python
+# In favorite_color_config.py
+def is_required(self) -> bool:
+    return False  # Make it optional
+```
+
+### File Reference
+
+Key files for the Demo Agent:
+
+- **Agent**: `/src/agentllm/agents/demo_agent.py` (lines 1-588)
+- **Config**: `/src/agentllm/agents/toolkit_configs/favorite_color_config.py` (lines 1-342)
+- **Tools**: `/src/agentllm/tools/color_toolkit.py` (lines 1-237)
+- **Tests**: `/tests/test_demo_agent.py` (lines 1-394)
+- **Registration**: `/src/agentllm/custom_handler.py` (lines 180-183)
+- **Proxy Config**: `/proxy_config.yaml` (lines 13-19)
 
 ## Environment Setup
 

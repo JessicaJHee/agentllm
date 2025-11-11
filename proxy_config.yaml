@@ -10,6 +10,14 @@ model_list:
       description: "Release management assistant for software releases, changelogs, and version planning"
       mode: chat
 
+  - model_name: agno/demo-agent
+    litellm_params:
+      model: agno/demo-agent
+      custom_llm_provider: agno
+    model_info:
+      description: "Demo agent showcasing AgentLLM features with favorite color configuration and simple tools"
+      mode: chat
+
   # Google Gemini 2.5 models
   - model_name: gemini-2.5-pro
     litellm_params:
