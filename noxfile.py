@@ -266,10 +266,15 @@ def dev_local_proxy(session):
         # Terminal 2: Start Open WebUI
         nox -s dev-local-proxy
     """
+    import os
     import subprocess
     import sys
 
     _check_env()
+
+    # Override OPENAI_API_BASE_URL to use local host
+    env = os.environ.copy()
+    env["OPENAI_API_BASE_URL"] = "http://host.docker.internal:8890/v1"
 
     # Check if proxy is running locally
     print("🔍 Checking if local proxy is running on port 8890...")
@@ -298,7 +303,7 @@ def dev_local_proxy(session):
             args.append("-d")
 
     try:
-        session.run(*args, external=True)
+        session.run(*args, external=True, env=env)
     except KeyboardInterrupt:
         print("\n\n⏹️  Stopping Open WebUI...")
         session.run(*compose, "stop", "open-webui", external=True)

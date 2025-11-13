@@ -658,7 +658,7 @@ class BaseAgentWrapper(ABC):
             effective_session_id = session_id if session_id is not None else self._session_id
 
             logger.info(f"Running agent.arun() for user {user_id}, session {effective_session_id} (non-streaming)...")
-            result = await agent.arun(message, user_id=user_id, session_id=effective_session_id, **kwargs)
+            result = await agent.arun(message, user_id=user_id, session_id=effective_session_id, stream=False, **kwargs)
             logger.info(f"✅ Agent.arun() completed, result type: {type(result)}")
             logger.info(f"<<< {self.__class__.__name__}._arun_non_streaming() FINISHED (success)")
             logger.info("=" * 80)

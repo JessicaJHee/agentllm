@@ -37,8 +37,6 @@ nox -s dev_build  # First time: builds containers
 - `agno/release-manager` - RHDH release management assistant
 - `agno/demo-agent` - Example agent with color tools
 
-See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed setup instructions.
-
 ## Architecture
 
 ```
@@ -87,8 +85,6 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 - Open WebUI: <http://localhost:3000> (external) → container port 8080 (internal)
 - LiteLLM Proxy: <http://localhost:8890>
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed development workflows.
-
 ### Common Commands
 
 ```bash
@@ -120,9 +116,10 @@ nox -s proxy
 curl -X POST http://localhost:8890/v1/chat/completions \
   -H "Authorization: Bearer sk-agno-test-key-12345" \
   -H "Content-Type: application/json" \
+  -H "X-OpenWebUI-User-Id: test-user" \
   -d '{
-    "model": "agno/release-manager",
-    "messages": [{"role": "user", "content": "Help me plan a release"}]
+    "model": "agno/demo-agent",
+    "messages": [{"role": "user", "content": "Hey"}]
   }'
 ```
 
@@ -138,7 +135,7 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 
 List models from running proxy:
 ```bash
-curl -X GET http://127.0.0.1:8890/v1/models \
+curl -X GET http://localhost:8890/v1/models \
   -H "Authorization: Bearer sk-agno-test-key-12345"
 ```
 
@@ -208,7 +205,7 @@ Optional:
 - `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET` - For Google Drive integration
 - `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` - Extended system prompt URL
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for complete reference.
+See `.env.secrets.template` for all available configuration options.
 
 ### Proxy Configuration
 
@@ -285,11 +282,9 @@ agentllm/
 │   ├── test_release_manager.py        # ReleaseManager tests
 │   └── test_demo_agent.py             # Demo agent tests
 ├── docs/
-│   ├── QUICKSTART.md                  # Getting started guide
-│   ├── DEVELOPMENT.md                 # Development workflows
-│   ├── CONFIGURATION.md               # Configuration reference
-│   └── agents/
-│       └── creating-agents.md         # Agent creation guide
+│   ├── agents/
+│   │   └── creating-agents.md         # Complete agent creation guide
+│   └── templates/                     # Documentation templates
 ├── noxfile.py                         # Task automation
 ├── proxy_config.yaml                  # Proxy config (symlink to src/)
 └── CLAUDE.md                          # Architecture & developer guide
@@ -297,11 +292,8 @@ agentllm/
 
 ## Documentation
 
-- **[Quick Start](docs/QUICKSTART.md)** - Detailed getting started guide
-- **[Development](docs/DEVELOPMENT.md)** - Development workflows and troubleshooting
-- **[Configuration](docs/CONFIGURATION.md)** - Environment variables and OAuth setup
-- **[Creating Agents](docs/agents/creating-agents.md)** - Guide to adding new agents
-- **[CLAUDE.md](CLAUDE.md)** - Complete architecture and development reference
+- **[Creating Agents](docs/agents/creating-agents.md)** - Complete guide to building custom agents with tools and configuration
+- **[CLAUDE.md](CLAUDE.md)** - Complete architecture and development reference for contributors
 
 ## Troubleshooting
 
@@ -325,11 +317,10 @@ lsof -i :8890
 
 ### Can't Access Open WebUI
 
-- Verify container is running: `podman ps` or `podman ps`
+- Verify container is running: `podman ps`
 - Check port mapping: Should see `0.0.0.0:3000->8080/tcp`
 - Try http://localhost:3000 (external port, not 8080)
-
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for more troubleshooting tips.
+- Check container logs: `nox -s dev_logs`
 
 ## Contributing
 
