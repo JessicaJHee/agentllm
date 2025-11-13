@@ -190,6 +190,7 @@ class BaseAgentWrapper(ABC):
         return {
             "db": self._shared_db,
             "add_history_to_context": True,
+            "add_datetime_to_context": True,
             "num_history_runs": 10,  # Include last 10 messages
             "read_chat_history": True,  # Allow agent to read full history
             "markdown": True,
@@ -477,8 +478,7 @@ class BaseAgentWrapper(ABC):
         else:
             logger.debug("NOT using constructor session IDs (Use Case 2 - pass on each run() call)")
 
-        agent_kwargs["add_datetime_to_context"] = True
-        logger.info(f"Final agent kwargs: {list(agent_kwargs.keys())}")
+        logger.debug(f"Final agent kwargs: {list(agent_kwargs.keys())}")
         return agent_kwargs
 
     def _create_agent_instance(
