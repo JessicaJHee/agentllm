@@ -7,31 +7,14 @@ nox.options.default_venv_backend = "none"
 
 
 def _get_compose_command():
-    """Detect and return compose command (docker or podman).
+    """Return podman compose command.
 
-    Auto-detects whether to use 'podman compose' or 'docker compose' based on
-    what's available on the system. Prefers podman if both are available.
+    This project uses Podman for containerization.
 
     Returns:
-        list: Command parts like ["podman", "compose"] or ["docker", "compose"]
+        list: Command parts ["podman", "compose"]
     """
-    import subprocess
-
-    # Check if podman compose is available
-    try:
-        result = subprocess.run(
-            ["podman", "compose", "version"],
-            capture_output=True,
-            stderr=subprocess.DEVNULL,
-            timeout=2,
-        )
-        if result.returncode == 0:
-            return ["podman", "compose"]
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # Fall back to docker compose
-    return ["docker", "compose"]
+    return ["podman", "compose"]
 
 
 @nox.session(venv_backend="none")
@@ -72,9 +55,14 @@ def proxy(session):
     )
 
 
-@nox.session(venv_backend="none")
+@nox.session(name="hello", venv_backend="none")
 def hello(session):
-    """Make a hello world request to the proxy (proxy must be running)."""
+    """Test the running proxy with a series of requests.
+
+    Prerequisites: Proxy must be running (nox -s proxy)
+
+    Usage: nox -s hello
+    """
     import json
     import subprocess
 
@@ -94,10 +82,17 @@ def hello(session):
 
     print("✅ Proxy is running!\n")
 
-    # Test 1: Health check
-    print("2️⃣  Testing /health endpoint...")
-    result = subprocess.run(["curl", "-s", "http://localhost:8890/health"], capture_output=True, text=True)
-    print(f"   Response: {result.stdout}\n")
+    # Test 1: Health check (readiness - lightweight, doesn't test models)
+    print("2️⃣  Testing /health/readiness endpoint...")
+    result = subprocess.run(["curl", "-s", "http://localhost:8890/health/readiness"], capture_output=True, text=True)
+    try:
+        data = json.loads(result.stdout)
+        if data.get("status") == "healthy":
+            print("   ✅ Proxy is healthy and ready\n")
+        else:
+            print(f"   Response: {result.stdout}\n")
+    except Exception:
+        print(f"   Response: {result.stdout}\n")
 
     # Test 2: List models
     print("3️⃣  Testing /v1/models endpoint...")
@@ -120,7 +115,7 @@ def hello(session):
         print(f"   Response: {result.stdout}\n")
 
     # Test 3: Hello world chat completion
-    print("4️⃣  Testing chat completion with agno/release-manager...")
+    print("4️⃣  Testing chat completion with agno/demo-agent...")
     print("   (Note: This will fail without LLM API keys configured)\n")
 
     result = subprocess.run(
@@ -135,8 +130,12 @@ def hello(session):
             "-d",
             json.dumps(
                 {
-                    "model": "agno/release-manager",
-                    "messages": [{"role": "user", "content": "Hello from nox!"}],
+                    "model": "agno/demo-agent",
+                    "messages": [{"role": "user", "content": "Hello from nox! What's your favorite color?"}],
+                    "metadata": {
+                        "user_id": "test-user-from-nox",
+                        "session_id": "test-session-123",
+                    },
                 }
             ),
         ],
@@ -145,21 +144,29 @@ def hello(session):
     )
 
     print("   Request:")
-    print('   {"model": "agno/release-manager", "messages": [{"role": "user", "content": "Hello from nox!"}]}')
+    print(
+        '   {"model": "agno/demo-agent", "messages": [...], "metadata": {"user_id": "test-user-from-nox", "session_id": "test-session-123"}}'
+    )
     print("\n   Response:")
     try:
         data = json.loads(result.stdout)
         if "error" in data:
             print(f"   ❌ Error: {data['error']}")
-            print("\n   💡 This is expected if agents don't have LLM API keys configured.")
-            print("      To fix: Add API keys to .env and configure agents with models")
+            if "message" in data["error"]:
+                print(f"      {data['error']['message']}")
+            print("\n   💡 Common issues:")
+            print("      - Missing GEMINI_API_KEY in environment")
+            print("      - Agent not configured properly")
+            print("      - Database not initialized")
         elif "choices" in data:
             content = data["choices"][0]["message"]["content"]
-            print(f"   ✅ Success! Agent responded: {content}")
+            print("   ✅ Success! Agent responded:\n")
+            print(f"      {content}\n")
         else:
             print(f"   {json.dumps(data, indent=2)}")
-    except Exception:
-        print(f"   {result.stdout}")
+    except Exception as e:
+        print(f"   Raw response: {result.stdout}")
+        print(f"   Parse error: {e}")
 
     print("\n✨ Test complete!\n")
 
@@ -170,27 +177,27 @@ def hello(session):
 
 
 def _check_env():
-    """Check if .env file exists and has required variables."""
+    """Check if .env.secrets file exists and has required variables."""
     import sys
     from pathlib import Path
 
-    env_file = Path(".env")
+    env_file = Path(".env.secrets")
 
-    # Check if .env exists
+    # Check if .env.secrets exists
     if not env_file.exists():
-        print("❌ Error: .env file not found")
-        print("\n💡 Create .env from template:")
-        print("   cp .env.example .env")
-        print("   # Then edit .env and add your GEMINI_API_KEY")
+        print("❌ Error: .env.secrets file not found")
+        print("\n💡 Create .env.secrets from template:")
+        print("   cp .env.secrets.template .env.secrets")
+        print("   # Then edit .env.secrets and add your GEMINI_API_KEY")
         sys.exit(1)
 
-    # Load .env and check for required variables
+    # Load .env.secrets and check for required variables
     with open(env_file) as f:
         env_content = f.read()
 
     if "GEMINI_API_KEY" not in env_content or "AIzaSy..." in env_content:
-        print("❌ Error: GEMINI_API_KEY is not set in .env")
-        print("\n💡 Edit .env and add your Google Gemini API key")
+        print("❌ Error: GEMINI_API_KEY is not set in .env.secrets")
+        print("\n💡 Edit .env.secrets and add your Google Gemini API key")
         print("   Get your key from: https://aistudio.google.com/apikey")
         sys.exit(1)
 

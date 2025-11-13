@@ -176,8 +176,8 @@ model_list:
 
 ```bash
 # Restart proxy
-nox -s dev-stop
-nox -s dev-build
+nox -s dev_stop
+nox -s dev_build
 
 # Test with curl
 curl -X POST http://localhost:8890/v1/chat/completions \
@@ -362,7 +362,7 @@ def get_agent(
     return create_weather_agent(temperature, max_tokens, **model_kwargs)
 ```
 
-Add to `.env`:
+Add to `.env.secrets`:
 ```bash
 OPENWEATHER_API_KEY=your_api_key_here
 ```
@@ -661,7 +661,7 @@ Study these reference implementations:
 **Solution:**
 1. Check import in `custom_handler.py`
 2. Verify entry in `_get_agent_module()` dictionary
-3. Restart proxy: `nox -s dev-stop && nox -s proxy`
+3. Restart proxy: `nox -s dev_stop && nox -s proxy`
 
 ### Tools Not Working
 

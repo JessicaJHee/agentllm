@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Containerfile
     container_name: litellm-proxy
+    networks:
+      - agentllm
     ports:
       - "8890:8890"
     # Load environment variables from shared files
@@ -28,6 +30,8 @@ services:
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
+    networks:
+      - agentllm
     ports:
       - "3000:8080"
     # Load environment variables from shared files
@@ -37,21 +41,30 @@ services:
     environment:
       # Override: Point to LiteLLM proxy (note: different variable name for OpenWebUI)
       # Compose uses OPENAI_API_BASE_URLS (plural) with the value from OPENAI_API_BASE_URL (singular)
-      # Dev mode (local proxy): http://host.docker.internal:8890/v1
-      # Production mode (both containerized): http://litellm-proxy:8890/v1
+      # Full container mode (both containerized): http://litellm-proxy:8890/v1
       OPENAI_API_BASE_URLS: "${OPENAI_API_BASE_URL:-http://litellm-proxy:8890/v1}"
       OPENAI_API_KEYS: "${LITELLM_MASTER_KEY:-sk-agno-test-key-12345}"
+      ENABLE_SIGNUP: true
 
-    # Enable host.docker.internal on all platforms (including Linux)
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
+    # Note: For local proxy development mode, use nox -s dev_local_proxy instead
+    # This runs the proxy on the host and only Open WebUI in a container
     volumes:
       - open-webui:/app/backend/data
     # depends_on:
     #   litellm-proxy:
     #     condition: service_healthy
     restart: unless-stopped
+
+networks:
+  agentllm:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: agentllm0
+    enable_ipv6: false
+    internal: false
+    ipam:
+      config:
+        - subnet: 10.91.0.0/24
 
 volumes:
   open-webui:

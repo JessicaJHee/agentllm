@@ -68,7 +68,7 @@ The Release Manager can fetch additional system prompt instructions from a Googl
 
 #### 1. Environment Variable
 
-Set the `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` environment variable in your `.env` file:
+Set the `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` environment variable in your `.env.secrets` file:
 
 ```bash
 # Full URL format
@@ -132,7 +132,7 @@ If fetching the extended prompt fails, **agent creation will fail** with a clear
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable not set` | Environment variable missing | Set the variable in `.env` |
+| `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable not set` | Environment variable missing | Set the variable in `.env.secrets` |
 | `Google Drive is not configured for user {user_id}` | User hasn't authorized Google Drive | User must complete OAuth flow |
 | `Document at {url} returned empty content` | Document is empty or inaccessible | Check document permissions and content |
 | `Failed to fetch extended system prompt from {url}` | Network error, invalid URL, or API error | Check URL, network, and Google Drive API status |

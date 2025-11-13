@@ -98,15 +98,15 @@ These belong in the embedded prompt (code), not here.
    - Copy the document URL
 
 6. **Configure AgentLLM:**
-   - Edit `.env` file
+   - Edit `.env.secrets` file
    - Set: `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL=<your-doc-url>`
-   - Restart services: `nox -s dev-build`
+   - Restart services: `nox -s dev_build`
 
 ### Verifying Setup
 
 1. **Start agent:**
    ```bash
-   nox -s dev-build
+   nox -s dev_build
    ```
 
 2. **Check logs for:**
@@ -146,8 +146,8 @@ Update the prompt when:
 3. **Force immediate update:**
    ```bash
    # Restart the services
-   nox -s dev-stop
-   nox -s dev-build
+   nox -s dev_stop
+   nox -s dev_build
    ```
 
 ### Testing Updates
@@ -166,13 +166,13 @@ Update the prompt when:
 
 3. **Make and test changes:**
    - Edit dev doc
-   - Restart: `nox -s dev-build`
+   - Restart: `nox -s dev_build`
    - Test with agent
    - Verify responses match expectations
 
 4. **Deploy to production:**
    - Copy working content from dev doc to prod doc
-   - Update production `.env` to use prod doc URL
+   - Update production `.env.secrets` to use prod doc URL
    - Restart production services
 
 **Single-User Testing:**
@@ -362,11 +362,11 @@ If multiple people maintain the prompt:
 
 1. **Fetch failed:**
    - Check logs for errors
-   - Verify document URL in `.env`
+   - Verify document URL in `.env.secrets`
    - Ensure document is publicly readable
 
 2. **Cache not invalidated:**
-   - Restart services: `nox -s dev-build`
+   - Restart services: `nox -s dev_build`
    - User hasn't re-authorized Google Drive
 
 3. **Instructions unclear:**
@@ -386,7 +386,7 @@ If multiple people maintain the prompt:
    - Verify: "Anyone with the link can view" (or specific users added)
 
 2. **Verify URL:**
-   - Check `.env` has correct URL or doc ID
+   - Check `.env.secrets` has correct URL or doc ID
    - Try both full URL and just ID:
      ```bash
      # Both should work
@@ -406,13 +406,13 @@ If multiple people maintain the prompt:
 
 1. **Clear cache:**
    ```bash
-   nox -s dev-clean  # Clears everything
-   nox -s dev-build
+   nox -s dev_clean  # Clears everything
+   nox -s dev_build
    ```
 
 2. **Check correct doc:**
    - Verify you're editing the right Google Doc
-   - Check `.env` points to the doc you're editing
+   - Check `.env.secrets` points to the doc you're editing
    - Open both and compare
 
 3. **Verify agent recreation:**
@@ -447,7 +447,7 @@ A: Agent creation fails with an error. Set `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE
 
 **Q: Can I test prompt changes without deploying?**
 
-A: Yes! Use a dev Google Doc and point your local `.env` to it. Test locally before updating production doc.
+A: Yes! Use a dev Google Doc and point your local `.env.secrets` to it. Test locally before updating production doc.
 
 ## Getting Help
 
@@ -458,7 +458,7 @@ A: Yes! Use a dev Google Doc and point your local `.env` to it. Test locally bef
 - Get feedback from team
 
 **For Technical Issues:**
-- Check application logs: `nox -s dev-logs`
+- Check application logs: `nox -s dev_logs`
 - See [CONFIGURATION.md](../CONFIGURATION.md) for setup
 - See [CLAUDE.md](../../CLAUDE.md) for architecture
 - File an issue in the repo

@@ -7,13 +7,36 @@ This guide will help you get AgentLLM up and running in under 10 minutes.
 Before you begin, make sure you have:
 
 1. **Python 3.11 or later** - [Download Python](https://www.python.org/downloads/)
-2. **uv package manager** - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
-3. **Docker or Podman** - Choose one:
-   - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac, Windows, Linux)
-   - [Podman](https://podman.io/getting-started/installation) (Linux, Mac, Windows)
-4. **Google Gemini API Key** - [Get your free key](https://aistudio.google.com/apikey)
 
-> **Note:** AgentLLM automatically detects whether to use Docker or Podman, so either will work seamlessly.
+2. **uv package manager** - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+   ```bash
+   # One-liner install (Mac/Linux)
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+3. **nox task automation** - [Install nox](https://nox.thea.codes/en/stable/tutorial.html#installation)
+   ```bash
+   # Install with uv (recommended)
+   uv tool install nox
+   ```
+
+4. **Podman** - [Install Podman](https://podman.io/getting-started/installation)
+   ```bash
+   # Mac (via Homebrew)
+   brew install podman
+   podman machine init
+   podman machine start
+
+   # Linux (Fedora/RHEL/CentOS)
+   sudo dnf install podman
+
+   # Ubuntu/Debian
+   sudo apt install podman
+   ```
+
+5. **Google Gemini API Key** - [Get your free key](https://aistudio.google.com/apikey)
+
+> **Note:** This project uses Podman for containerization. Podman is a daemonless container engine that's compatible with Docker's OCI format but more secure.
 
 ## Installation
 
@@ -38,10 +61,10 @@ This will:
 ### Step 3: Configure Environment
 
 ```bash
-cp .env.example .env
+cp .env.secrets.template .env.secrets
 ```
 
-Edit the `.env` file and set your Google Gemini API key:
+Edit the `.env.secrets` file and set your Google Gemini API key:
 
 ```bash
 # Required: Add your Gemini API key
@@ -52,12 +75,12 @@ GEMINI_API_KEY=AIzaSy...your_actual_key_here
 1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
 2. Click "Get API key"
 3. Click "Create API key in new project" (or select existing project)
-4. Copy the key and paste it in `.env`
+4. Copy the key and paste it in `.env.secrets`
 
 ### Step 4: Start Everything
 
 ```bash
-nox -s dev-build
+nox -s dev_build  # First time: builds containers
 ```
 
 This command will:
@@ -65,6 +88,11 @@ This command will:
 - Start the Open WebUI container
 - Connect them together
 - Display progress and logs
+
+**For subsequent starts**, use `nox -s dev` (faster, reuses existing images):
+```bash
+nox -s dev  # Quick start without rebuild
+```
 
 Wait for the message:
 ```
@@ -146,7 +174,7 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 # Find what's using the port
 lsof -i :3000
 
-# Kill the process or change the port in docker-compose.yaml
+# Kill the process or change the port in compose.yaml
 ```
 
 ### API Key Not Set
@@ -154,25 +182,21 @@ lsof -i :3000
 **Error:** `GEMINI_API_KEY is not set in .env`
 
 **Solution:**
-1. Ensure you've created `.env` from `.env.example`
+1. Ensure you've created `.env.secrets` from `.env.secrets.template`
 2. Replace `AIzaSy...` with your actual API key
-3. Save the file and restart: `nox -s dev-build`
+3. Save the file and restart: `nox -s dev_build`
 
 ### Container Won't Start
 
-**Error:** Docker daemon not running or permission denied
+**Error:** Podman not running or permission denied
 
-**Solution (Docker):**
+**Solution:**
 ```bash
-# Mac: Start Docker Desktop
-# Linux: Start Docker daemon
-sudo systemctl start docker
-```
+# Mac: Start Podman machine
+podman machine start
 
-**Solution (Podman):**
-```bash
-# Start Podman service
-podman machine start  # Mac
+# Linux: Start Podman service (if needed)
+sudo systemctl start podman
 sudo systemctl start podman  # Linux
 ```
 
@@ -183,21 +207,19 @@ sudo systemctl start podman  # Linux
 **Solutions:**
 1. **Check container is running:**
    ```bash
-   docker ps
-   # or
    podman ps
    ```
    Look for `open-webui` container with status `Up`
 
 2. **Check port mapping:**
    ```bash
-   docker ps | grep open-webui
+   podman ps | grep open-webui
    # Should show: 0.0.0.0:3000->8080/tcp
    ```
 
 3. **View logs:**
    ```bash
-   nox -s dev-logs -- open-webui
+   nox -s dev_logs -- open-webui
    ```
 
 ### Agent Doesn't Respond
@@ -205,9 +227,9 @@ sudo systemctl start podman  # Linux
 **Issue:** Message sent but no response from agent
 
 **Possible Causes:**
-1. **Invalid API key** - Check `.env` has correct `GEMINI_API_KEY`
+1. **Invalid API key** - Check `.env.secrets` has correct `GEMINI_API_KEY`
 2. **API quota exceeded** - Check [Google AI Studio](https://aistudio.google.com/apikey) for quota limits
-3. **Network issue** - Check proxy logs: `nox -s dev-logs -- litellm-proxy`
+3. **Network issue** - Check proxy logs: `nox -s dev_logs -- litellm-proxy`
 
 ## Next Steps
 
@@ -232,7 +254,7 @@ nox -s proxy
 
 **Terminal 2** - Start Open WebUI:
 ```bash
-nox -s dev-local-proxy
+nox -s dev_local_proxy
 ```
 
 Now when you edit agent code, the proxy automatically reloads.
@@ -247,20 +269,20 @@ Follow the [Creating Agents](agents/creating-agents.md) guide to build custom ag
 
 ```bash
 # Start everything (recommended)
-nox -s dev-build
+nox -s dev_build
 
 # Start in background
-nox -s dev-build -- -d
+nox -s dev_build -- -d
 
 # View logs
-nox -s dev-logs              # All services
-nox -s dev-logs -- open-webui  # Specific service
+nox -s dev_logs              # All services
+nox -s dev_logs -- open-webui  # Specific service
 
 # Stop containers (keeps data)
-nox -s dev-stop
+nox -s dev_stop
 
 # Clean everything (deletes data)
-nox -s dev-clean
+nox -s dev_clean
 
 # Run tests
 nox -s test

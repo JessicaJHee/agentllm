@@ -8,7 +8,13 @@ A custom LiteLLM provider that exposes [Agno](https://github.com/agno-agi/agno) 
 
 Get the full stack running in under 5 minutes:
 
+**Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), [nox](https://nox.thea.codes/), [Podman](https://podman.io/), and a [Gemini API key](https://aistudio.google.com/apikey)
+
 ```bash
+# 0. Install uv and nox (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh  # Install uv
+uv tool install nox                               # Install nox
+
 # 1. Clone and navigate
 git clone https://github.com/durandom/agentllm
 cd agentllm
@@ -17,11 +23,12 @@ cd agentllm
 uv sync
 
 # 3. Configure environment
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY (get from https://aistudio.google.com/apikey)
+cp .env.secrets.template .env.secrets
+# Edit .env.secrets and add your GEMINI_API_KEY (get from https://aistudio.google.com/apikey)
 
 # 4. Start everything (containerized)
-nox -s dev-build
+nox -s dev_build  # First time: builds containers
+# nox -s dev      # Subsequent starts: reuses existing images
 ```
 
 **Access Open WebUI:** <http://localhost:3000>
@@ -60,8 +67,9 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 ### Prerequisites
 
 - Python 3.11+
-- [uv](https://docs.astral.sh/uv/) package manager
-- Docker or Podman (nox auto-detects)
+- [uv](https://docs.astral.sh/uv/) package manager ([install](https://docs.astral.sh/uv/getting-started/installation/): `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [nox](https://nox.thea.codes/) task automation ([install](https://nox.thea.codes/en/stable/tutorial.html#installation): `uv tool install nox`)
+- [Podman](https://podman.io/) ([install](https://podman.io/getting-started/installation))
 - Google Gemini API key ([get here](https://aistudio.google.com/apikey))
 
 ### Development Modes
@@ -70,8 +78,10 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
 | Mode | Command | Use When | Proxy | OpenWebUI |
 |------|---------|----------|-------|-----------|
-| **Full Container** | `nox -s dev-build` | Just testing agents | Container | Container |
-| **Development** | Terminal 1: `nox -s proxy`<br>Terminal 2: `nox -s dev-local-proxy` | Modifying agent code | Local (hot reload) | Container |
+| **Full Container** | `nox -s dev` or `nox -s dev_build` | Just testing agents | Container | Container |
+| **Development** | Terminal 1: `nox -s proxy`<br>Terminal 2: `nox -s dev_local_proxy` | Modifying agent code | Local (hot reload) | Container |
+
+**Note:** Use `nox -s dev` for quick starts (reuses existing images), or `nox -s dev_build` when you need to rebuild (after code changes).
 
 **Port reference:**
 - Open WebUI: <http://localhost:3000> (external) → container port 8080 (internal)
@@ -89,10 +99,11 @@ uv run pytest tests/test_custom_handler.py -v  # Run specific test
 
 # Development
 nox -s proxy                                   # Start LiteLLM proxy locally
-nox -s dev-build                               # Start full containerized stack
-nox -s dev-logs                                # View container logs
-nox -s dev-stop                                # Stop containers (preserve data)
-nox -s dev-clean                               # Clean everything (including volumes)
+nox -s dev                                     # Start full containerized stack (no rebuild)
+nox -s dev_build                               # Build and start (forces rebuild)
+nox -s dev_logs                                # View container logs
+nox -s dev_stop                                # Stop containers (preserve data)
+nox -s dev_clean                               # Clean everything (including volumes)
 
 # Code quality
 nox -s format                                  # Format code
@@ -131,7 +142,7 @@ curl -X GET http://127.0.0.1:8890/v1/models \
   -H "Authorization: Bearer sk-agno-test-key-12345"
 ```
 
-> **Note:** All models require `GEMINI_API_KEY` in your `.env` file.
+> **Note:** All models require `GEMINI_API_KEY` in your `.env.secrets` file.
 
 ## Adding New Agents
 
@@ -302,7 +313,7 @@ uv pip install -e .
 
 ### Agent Fails to Initialize
 
-Ensure `GEMINI_API_KEY` is set in `.env`. Get your key from [Google AI Studio](https://aistudio.google.com/apikey).
+Ensure `GEMINI_API_KEY` is set in `.env.secrets`. Get your key from [Google AI Studio](https://aistudio.google.com/apikey).
 
 ### Proxy Won't Start
 
@@ -314,7 +325,7 @@ lsof -i :8890
 
 ### Can't Access Open WebUI
 
-- Verify container is running: `docker ps` or `podman ps`
+- Verify container is running: `podman ps` or `podman ps`
 - Check port mapping: Should see `0.0.0.0:3000->8080/tcp`
 - Try http://localhost:3000 (external port, not 8080)
 

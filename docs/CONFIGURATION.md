@@ -17,14 +17,16 @@ This guide covers all configuration options for AgentLLM, including environment 
 
 AgentLLM supports two approaches for managing environment variables:
 
-### Single `.env` File (Recommended for Local Development)
+### Environment Files (Recommended for Local Development)
 
 ```bash
-cp .env.example .env
-# Edit .env with all your settings
+cp .env.secrets.template .env.secrets
+# Edit .env.secrets with all your secrets
 ```
 
-All configuration in one file. Simple and straightforward.
+The project uses split environment files:
+- `.env.shared` - Non-sensitive defaults (tracked in git)
+- `.env.secrets` - Secrets and API keys (gitignored)
 
 ### Split Configuration (Recommended for Production)
 
@@ -40,7 +42,7 @@ LITELLM_MASTER_KEY=sk-agno-...
 OAUTH_CLIENT_SECRET=...
 ```
 
-Docker Compose automatically loads both files:
+Podman Compose automatically loads both files:
 ```yaml
 env_file:
   - .env.shared   # Team-wide defaults
@@ -129,10 +131,10 @@ OPENAI_API_BASE_URL=http://litellm-proxy:8890/v1
 - Open WebUI runs in a container
 - Needs to reach proxy which might be on host machine or another container
 - `host.docker.internal` is a special DNS name that resolves to the host machine
-- On Linux, this is automatically configured via `extra_hosts` in docker-compose.yaml
+- On Linux, this is automatically configured via `extra_hosts` in compose.yaml
 
 **Mode selection:**
-- `nox -s dev-local-proxy` → Uses value from `.env` (local proxy)
+- `nox -s dev_local_proxy` → Uses value from `.env.secrets` (local proxy)
 - `nox -s dev-full` → Overrides to `http://litellm-proxy:8890/v1` (both containerized)
 
 ### Branding
@@ -163,7 +165,7 @@ WEBUI_URL=http://localhost:3000
 **Port explanation:**
 - External port: `3000` (what you access in browser)
 - Internal port: `8080` (inside container)
-- Mapping: `3000:8080` in docker-compose.yaml
+- Mapping: `3000:8080` in compose.yaml
 
 **Production example:**
 ```bash
@@ -309,7 +311,7 @@ Allow users to log in with their Google accounts.
 
    **Critical:** URI must exactly match `${WEBUI_URL}/oauth/oidc/callback`
 
-6. **Copy credentials to `.env`:**
+6. **Copy credentials to `.env.secrets`:**
    ```bash
    ENABLE_OAUTH_SIGNUP=true
    OAUTH_CLIENT_ID=123456789-abc.apps.googleusercontent.com
@@ -318,8 +320,8 @@ Allow users to log in with their Google accounts.
 
 7. **Restart services:**
    ```bash
-   nox -s dev-stop
-   nox -s dev-build
+   nox -s dev_stop
+   nox -s dev_build
    ```
 
 8. **Test:**
@@ -355,7 +357,7 @@ Enables the Release Manager agent to access Google Drive (read/write documents).
 
    **Note:** Just `http://localhost`, not a full URL. This is for the local OAuth flow.
 
-6. **Copy credentials to `.env`:**
+6. **Copy credentials to `.env.secrets`:**
    ```bash
    GDRIVE_CLIENT_ID=123456789-xyz.apps.googleusercontent.com
    GDRIVE_CLIENT_SECRET=GOCSPX-...
@@ -363,8 +365,8 @@ Enables the Release Manager agent to access Google Drive (read/write documents).
 
 7. **Restart services:**
    ```bash
-   nox -s dev-stop
-   nox -s dev-build
+   nox -s dev_stop
+   nox -s dev_build
    ```
 
 ### User Flow
@@ -401,8 +403,8 @@ Enables the Release Manager agent to query and update Jira tickets.
 
 3. **Restart services:**
    ```bash
-   nox -s dev-stop
-   nox -s dev-build
+   nox -s dev_stop
+   nox -s dev_build
    ```
 
 ### User Flow
@@ -456,8 +458,8 @@ See [CLAUDE.md - Release Manager System Prompt Architecture](../CLAUDE.md#releas
 
 5. **Restart services:**
    ```bash
-   nox -s dev-stop
-   nox -s dev-build
+   nox -s dev_stop
+   nox -s dev_build
    ```
 
 ### Update Workflow
@@ -525,11 +527,11 @@ grep -q "GEMINI_API_KEY" .env && echo "✓ GEMINI_API_KEY set" || echo "✗ GEMI
 grep -q "LITELLM_MASTER_KEY" .env && echo "✓ LITELLM_MASTER_KEY set" || echo "✗ LITELLM_MASTER_KEY missing"
 ```
 
-The `nox -s dev-build` command automatically validates required variables before starting.
+The `nox -s dev_build` command automatically validates required variables before starting.
 
 ## Reference
 
-See `.env.example` for:
+See `.env.secrets.template` for:
 - All available variables
 - Detailed inline comments
 - Example values
@@ -537,7 +539,7 @@ See `.env.example` for:
 
 ## Security Best Practices
 
-1. **Never commit `.env` to git**
+1. **Never commit `.env.secrets` to git**
    - Already in `.gitignore`
    - Use `.env.shared` for team-wide non-sensitive config
 
@@ -567,12 +569,12 @@ See `.env.example` for:
 
 ### Configuration Not Loading
 
-**Issue:** Changes to `.env` not reflected
+**Issue:** Changes to `.env.secrets` not reflected
 
 **Solution:**
 ```bash
-nox -s dev-stop    # Stop containers
-nox -s dev-build   # Rebuild and restart
+nox -s dev_stop    # Stop containers
+nox -s dev_build   # Rebuild and restart
 ```
 
 ### OAuth Redirect URI Mismatch
@@ -596,7 +598,7 @@ nox -s dev-build   # Rebuild and restart
 1. Verify document URL in `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL`
 2. Check document sharing (user must have read access)
 3. Ensure user has authorized Google Drive in agent
-4. Check logs: `nox -s dev-logs -- litellm-proxy`
+4. Check logs: `nox -s dev_logs -- litellm-proxy`
 
 ## Next Steps
 

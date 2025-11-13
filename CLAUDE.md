@@ -59,7 +59,7 @@ nox -s dev_local_proxy
 ```
 
 **How it works:**
-- `OPENAI_API_BASE_URL` in `.env` is set to `http://host.docker.internal:8890/v1`
+- `OPENAI_API_BASE_URL` in `.env.secrets` is set to `http://host.docker.internal:8890/v1`
 - Open WebUI (containerized) connects to proxy on host machine
 - Works on all platforms (Mac, Linux, Windows) via `extra_hosts` configuration
 - Enables fast iteration: edit code → proxy reloads → test immediately
@@ -87,35 +87,37 @@ nox -s dev_full -- -d
 
 **How it works:**
 - Overrides `OPENAI_API_BASE_URL` to `http://litellm-proxy:8890/v1`
-- Both services run in Docker network
+- Both services run in Podman network
 - Matches production deployment architecture
 
 **Advantages:**
 
 - Production-like environment
-- Tests full Docker setup
+- Tests full Podman setup
 - Easier for non-Python developers
 
-### Common Docker Commands
+### Common Podman Commands
 
 ```bash
+# Start services (quick - reuses existing images)
+nox -s dev              # Normal start
+nox -s dev_build        # Force rebuild (after code changes)
+nox -s dev_detach       # Start in background
+
 # View logs from containers
-nox -s dev-logs                    # All services
-nox -s dev-logs -- litellm-proxy   # Specific service
+nox -s dev_logs                    # All services
+nox -s dev_logs -- litellm-proxy   # Specific service
 
 # Stop containers (preserves data)
-nox -s dev-stop
+nox -s dev_stop
 
 # Clean everything (including volumes)
-nox -s dev-clean
-
-# Legacy command (still works, starts both services)
-nox -s dev
+nox -s dev_clean
 ```
 
 ### Switching Between Modes
 
-The mode is controlled by the `OPENAI_API_BASE_URL` environment variable in `.env`:
+The mode is controlled by the `OPENAI_API_BASE_URL` environment variable in `.env.secrets`:
 
 ```bash
 # Development mode (local proxy)
@@ -127,7 +129,7 @@ OPENAI_API_BASE_URL=http://litellm-proxy:8890/v1
 
 **No manual configuration needed** - just use the appropriate `nox` command:
 
-- `nox -s dev_local_proxy` - Uses value from `.env` (development mode)
+- `nox -s dev_local_proxy` - Uses value from `.env.secrets` (development mode)
 - `nox -s dev_full` - Automatically overrides to container mode
 
 ### Code Quality
@@ -189,7 +191,7 @@ LiteLLM's `get_instance_fn()` constructs file paths relative to the config direc
 - Handler reference: `custom_handler.agno_handler`
 - Stub imports from actual implementation: `from agentllm.custom_handler import agno_handler`
 
-**Docker Layout:**
+**Podman Layout:**
 
 ```
 /app/
@@ -201,7 +203,7 @@ LiteLLM's `get_instance_fn()` constructs file paths relative to the config direc
 
 - Same pattern as local dev, ensures consistency across environments
 
-This pattern ensures compatibility across local development and Docker environments while keeping code organized.
+This pattern ensures compatibility across local development and Podman environments while keeping code organized.
 
 ### Agent Architecture
 
@@ -660,7 +662,7 @@ Key files for the Demo Agent:
 
 ## Environment Setup
 
-Required environment variables (see `.env.example`):
+Required environment variables (see `.env.secrets.template`):
 
 - `GEMINI_API_KEY` - Required for all models (get from <https://aistudio.google.com/apikey>)
 - `LITELLM_MASTER_KEY` - API key for proxy access (default: `sk-agno-test-key-12345`)
@@ -751,11 +753,11 @@ OFFLINE_MODE=true                              # Production only - prevents down
 
 OpenWebUI supports three ways to set environment variables:
 
-1. **`.env` file** - Used locally via Docker Compose `env_file:` directive
+1. **Environment files** - Used locally (`.env.secrets` + `.env.shared`) via Podman Compose `env_file:` directive
 2. **Kubernetes ConfigMaps/Secrets** - Used in production deployment
-3. **Docker Compose `environment:`** - Direct variable specification
+3. **Podman Compose `environment:`** - Direct variable specification
 
-See `.env.example` for complete local configuration template.
+See `.env.secrets.template` for complete configuration template.
 
 ## Key Implementation Details
 

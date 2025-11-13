@@ -16,13 +16,13 @@ AgentLLM supports two development modes optimized for different workflows. Choos
 │         ✓ Easy debugging with local tools
 │         ✓ Direct log access
 │         Command: nox -s proxy (terminal 1)
-│                  nox -s dev-local-proxy (terminal 2)
+│                  nox -s dev_local_proxy (terminal 2)
 │
 └─ NO  → Full Container Mode (Recommended for First-Time Setup)
           ✓ Simplest to start - one command
           ✓ Production-like environment
           ✓ No Python environment needed
-          Command: nox -s dev-build
+          Command: nox -s dev (or nox -s dev_build for first time)
 ```
 
 ### Quick Decision Guide
@@ -40,7 +40,7 @@ AgentLLM supports two development modes optimized for different workflows. Choos
 
 ```
 ┌──────────────────────────────────────────────┐
-│            Docker Compose                     │
+│            Podman Compose                     │
 │                                               │
 │  ┌─────────────────┐    ┌─────────────────┐ │
 │  │   OpenWebUI     │───▶│ LiteLLM Proxy   │ │
@@ -69,9 +69,9 @@ AgentLLM supports two development modes optimized for different workflows. Choos
 
 ### Prerequisites
 
-1. **Docker Desktop** (or Docker + Docker Compose)
-   - Install from: https://docs.docker.com/get-docker/
-   - Verify: `docker compose version`
+1. **Podman**
+   - Install from: https://podman.io/getting-started/installation
+   - Verify: `podman compose version`
 
 2. **Google Gemini API Key** (Required)
    - Get from: https://aistudio.google.com/apikey
@@ -86,10 +86,10 @@ cd /path/to/sidekick/agentllm
 
 2. **Create environment file**
 ```bash
-cp .env.example .env
+cp .env.secrets.template .env.secrets
 ```
 
-3. **Edit `.env` and add your API key**
+3. **Edit `.env.secrets` and add your API key**
 ```bash
 # Required: Add your Gemini API key
 GEMINI_API_KEY=AIzaSy...  # Replace with your actual key
@@ -103,7 +103,7 @@ ENABLE_OAUTH_SIGNUP=false
 
 4. **Start the application**
 ```bash
-nox -s dev-build
+nox -s dev_build
 ```
 
 5. **Open your browser**
@@ -134,75 +134,80 @@ Understanding ports is important for accessing services and configuring connecti
 
 ## Development Commands (via Nox)
 
-**Note:** Nox automatically detects whether to use Docker or Podman - no configuration needed!
+**Note:** Nox automatically detects whether to use Podman - no configuration needed!
 
-The project uses [Nox](https://nox.thea.codes/) for managing development tasks. All Docker Compose operations are available as nox sessions.
+The project uses [Nox](https://nox.thea.codes/) for managing development tasks. All Podman Compose operations are available as nox sessions.
 
 ### Available Sessions
 
 | Command | Description |
 |---------|-------------|
-| `nox -s dev` | Start development environment (foreground) |
-| `nox -s dev-build` | Build and start (forces rebuild) |
-| `nox -s dev-detach` | Start in background with health checks |
-| `nox -s dev-logs` | View container logs |
-| `nox -s dev-stop` | Stop all containers |
-| `nox -s dev-clean` | Stop containers and remove all data |
+| `nox -s dev` | Start environment (reuses existing images) |
+| `nox -s dev_build` | Build and start (forces rebuild) |
+| `nox -s dev_detach` | Start in background with health checks |
+| `nox -s dev_logs` | View container logs |
+| `nox -s dev_stop` | Stop all containers |
+| `nox -s dev_clean` | Stop containers and remove all data |
+
+**Quick tip:** Use `nox -s dev` for daily work (faster), and `nox -s dev_build` only when you modify dependencies or need a clean build.
 
 ### Examples
 
 ```bash
-# Start with build (first time or after dependency changes)
-nox -s dev-build
+# First time or after dependency changes
+nox -s dev_build
+
+# Quick start (reuses existing images)
+nox -s dev
 
 # Start in background
-nox -s dev-detach
+nox -s dev_detach
 
 # View logs
-nox -s dev-logs
+nox -s dev_logs
 
 # View logs for specific service
-nox -s dev-logs -- litellm-proxy
+nox -s dev_logs -- litellm-proxy
 
 # Stop services
-nox -s dev-stop
+nox -s dev_stop
 
 # Clean everything (deletes data!)
-nox -s dev-clean
+nox -s dev_clean
 ```
 
-## Manual Docker Compose Commands
+## Manual Podman Compose Commands
 
-If you prefer to use docker compose directly:
+If you prefer to use podman compose directly:
 
 ```bash
 # Start services (foreground)
-docker compose up
+podman compose up
 
 # Start services (background)
-docker compose up -d
+podman compose up -d
 
 # Build and start
-docker compose up --build
+podman compose up --build
 
 # Stop services
-docker compose down
+podman compose down
 
 # Stop and remove volumes (deletes data)
-docker compose down -v
+podman compose down -v
 
 # View logs
-docker compose logs -f
+podman compose logs -f
 
 # View logs for specific service
-docker compose logs -f litellm-proxy
-docker compose logs -f open-webui
+podman compose logs -f litellm-proxy
+podman compose logs -f open-webui
 
 # Restart a service
-docker compose restart litellm-proxy
+podman compose restart litellm-proxy
 
 # Rebuild a specific service
-docker compose build litellm-proxy
+podman compose build litellm-proxy
 ```
 
 ## Development Workflow
@@ -221,7 +226,7 @@ volumes:
 1. Edit files in `src/agentllm/`
 2. Restart the LiteLLM service:
    ```bash
-   docker compose restart litellm-proxy
+   podman compose restart litellm-proxy
    ```
 
 ### Viewing Logs
@@ -230,25 +235,25 @@ Monitor what's happening in real-time:
 
 ```bash
 # All services
-docker compose logs -f
+podman compose logs -f
 
 # Just LiteLLM proxy
-docker compose logs -f litellm-proxy
+podman compose logs -f litellm-proxy
 
 # Just OpenWebUI
-docker compose logs -f open-webui
+podman compose logs -f open-webui
 ```
 
 ### Accessing the Database
 
-The SQLite database is stored in a Docker volume. To access it:
+The SQLite database is stored in a Podman volume. To access it:
 
 ```bash
 # Copy database to local filesystem
-docker compose cp litellm-proxy:/app/tmp/agno_sessions.db ./agno_sessions.db
+podman compose cp litellm-proxy:/app/tmp/agno_sessions.db ./agno_sessions.db
 
 # Or exec into the container
-docker compose exec litellm-proxy /bin/bash
+podman compose exec litellm-proxy /bin/bash
 cd /app/tmp
 sqlite3 agno_sessions.db
 ```
@@ -257,20 +262,20 @@ sqlite3 agno_sessions.db
 
 ```bash
 # List running containers
-docker compose ps
+podman compose ps
 
 # Exec into litellm-proxy
-docker compose exec litellm-proxy bash
+podman compose exec litellm-proxy bash
 
 # Exec into open-webui
-docker compose exec open-webui bash
+podman compose exec open-webui bash
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-All configuration is in `.env`. See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup instructions.
+All configuration is in `.env.secrets`. See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup instructions.
 
 **Required variables:**
 ```bash
@@ -306,7 +311,7 @@ All configuration details, OAuth setup instructions, and troubleshooting are doc
 
 ### Volumes
 
-Two Docker volumes persist data across restarts:
+Two Podman volumes persist data across restarts:
 
 1. **`litellm-data`**: SQLite database and Google Drive workspace
    - Database: `/app/tmp/agno_sessions.db`
@@ -319,21 +324,21 @@ Two Docker volumes persist data across restarts:
 
 ```bash
 # Backup database
-docker compose cp litellm-proxy:/app/tmp/agno_sessions.db ./backup-$(date +%Y%m%d).db
+podman compose cp litellm-proxy:/app/tmp/agno_sessions.db ./backup-$(date +%Y%m%d).db
 
 # Restore database
-docker compose cp ./backup-20250107.db litellm-proxy:/app/tmp/agno_sessions.db
-docker compose restart litellm-proxy
+podman compose cp ./backup-20250107.db litellm-proxy:/app/tmp/agno_sessions.db
+podman compose restart litellm-proxy
 ```
 
 ### Resetting Data
 
 ```bash
 # Remove all data (fresh start)
-nox -s dev-clean
+nox -s dev_clean
 
 # Or manually
-docker compose down -v
+podman compose down -v
 ```
 
 ## Troubleshooting
@@ -342,11 +347,11 @@ docker compose down -v
 
 **Check logs:**
 ```bash
-docker compose logs litellm-proxy
+podman compose logs litellm-proxy
 ```
 
 **Common issues:**
-- Missing `GEMINI_API_KEY` in `.env`
+- Missing `GEMINI_API_KEY` in `.env.secrets`
 - Invalid API key
 - Port 8890 or 3000 already in use
 
@@ -378,11 +383,11 @@ The LiteLLM container has a health check that calls `/health`:
 curl http://localhost:8890/health
 
 # View health status
-docker compose ps
+podman compose ps
 ```
 
 **If unhealthy:**
-1. Check logs: `docker compose logs litellm-proxy`
+1. Check logs: `podman compose logs litellm-proxy`
 2. Verify `GEMINI_API_KEY` is set
 3. Ensure config file is mounted correctly
 
@@ -395,12 +400,12 @@ docker compose ps
 
 2. **Check environment variables**:
    ```bash
-   docker compose exec open-webui env | grep OAUTH
+   podman compose exec open-webui env | grep OAUTH
    ```
 
 3. **Restart OpenWebUI**:
    ```bash
-   docker compose restart open-webui
+   podman compose restart open-webui
    ```
 
 ### Database locked errors
@@ -411,7 +416,7 @@ SQLite doesn't support concurrent writes. Ensure:
 
 ```bash
 # Check running containers
-docker compose ps
+podman compose ps
 
 # Should show only ONE litellm-proxy container
 ```
@@ -422,10 +427,10 @@ After editing code in `src/agentllm/`:
 
 ```bash
 # Restart the service
-docker compose restart litellm-proxy
+podman compose restart litellm-proxy
 
 # Or rebuild if dependencies changed
-docker compose up --build -d
+podman compose up --build -d
 ```
 
 ## Performance Tips
@@ -435,11 +440,11 @@ docker compose up --build -d
 Only rebuild when dependencies change:
 ```bash
 # Code changes only - just restart
-docker compose restart litellm-proxy
+podman compose restart litellm-proxy
 
 # Dependencies changed - rebuild
-docker compose build litellm-proxy
-docker compose up -d
+podman compose build litellm-proxy
+podman compose up -d
 ```
 
 ### Resource Limits
@@ -495,7 +500,7 @@ curl http://localhost:8890/v1/chat/completions \
 | Health checks | Basic curl | Full K8s probes |
 | Replicas | Single container | Multiple OpenWebUI pods |
 | TLS | HTTP only | HTTPS with edge termination |
-| Secrets | `.env` file | Kubernetes Secrets |
+| Secrets | `.env.secrets` file | Kubernetes Secrets |
 
 ## Next Steps
 
@@ -512,23 +517,23 @@ When ready for production, see [openshift/README.md](openshift/README.md) for de
 ### Add Features
 
 1. Make changes to code in `src/agentllm/`
-2. Restart services: `docker compose restart litellm-proxy`
+2. Restart services: `podman compose restart litellm-proxy`
 3. Test in browser at http://localhost:3000
 4. Commit changes when ready
 
 ## Getting Help
 
-- View logs: `docker compose logs -f`
-- Check container status: `docker compose ps`
-- Inspect environment: `docker compose exec litellm-proxy env`
+- View logs: `podman compose logs -f`
+- Check container status: `podman compose ps`
+- Inspect environment: `podman compose exec litellm-proxy env`
 - Test API: `curl http://localhost:8890/health`
 
 ## Clean Up
 
 ```bash
 # Stop services (keeps data)
-nox -s dev-stop
+nox -s dev_stop
 
 # Remove everything (including data)
-nox -s dev-clean
+nox -s dev_clean
 ```
