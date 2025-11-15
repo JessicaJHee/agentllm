@@ -198,6 +198,36 @@ def mock_gdrive_credentials():
     return mock_creds
 
 
+@pytest.fixture(scope="module")
+def gemini_api_key():
+    """Check for GEMINI_API_KEY and skip if not available."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        pytest.skip("GEMINI_API_KEY environment variable not set")
+    return api_key
+
+
+@pytest.fixture
+def rhai_agent(shared_db, token_storage, gemini_api_key):
+    """Create RHAIRoadmapPublisher agent for testing.
+
+    This agent will have mocked JIRA toolkit to return synthetic data.
+    """
+    from agentllm.agents.rhai_roadmap_publisher import RHAIRoadmapPublisher
+
+    # Create agent with test user
+    agent = RHAIRoadmapPublisher(
+        shared_db=shared_db,
+        token_storage=token_storage,
+        user_id="eval-test-user",
+        session_id="eval-test-session",
+        temperature=0.7,
+        max_tokens=4000,
+    )
+
+    return agent
+
+
 # =============================================================================
 # Evaluator Agent Fixtures (One per aspect)
 # =============================================================================
@@ -477,17 +507,195 @@ class TestCompletenessEvaluation:
         assert score >= 95.0, f"Completeness score {score} below threshold 95.0 (expected 100 for identical outputs)"
 
 
-# Note: Actual agent-based tests will be added in the next phase
-# For now, we're validating the evaluation framework works correctly
+    def test_basic_scenario_completeness_with_agent(
+        self,
+        rhai_agent,
+        evaluator_agent_completeness,
+        mock_jira_search,
+    ):
+        """Test completeness evaluation with actual agent execution.
 
-# =============================================================================
-# Placeholder for Future Agent Integration Tests
-# =============================================================================
+        This test runs the RHAIRoadmapPublisher agent with mocked JIRA data
+        and evaluates the completeness of its generated roadmap.
+        """
+        from unittest.mock import patch
 
-# TODO: Add actual agent execution tests once agent integration is confirmed:
-# - test_basic_scenario_completeness_with_agent
-# - test_basic_scenario_accuracy_with_agent
-# - test_basic_scenario_structure_with_agent
-# - test_basic_scenario_content_with_agent
-# - test_no_dates_scenario_completeness_with_agent
-# - test_empty_scenario_handling_with_agent
+        # Create mock JIRA client
+        mock_search_fn = mock_jira_search(SCENARIO_BASIC.issues)
+        mock_jira_client = MagicMock()
+        mock_jira_client.search_issues = mock_search_fn
+
+        # Mock Google Drive credentials (required for agent initialization)
+        with patch("agentllm.agents.toolkit_configs.gdrive_config.get_gdrive_credentials") as mock_gdrive:
+            mock_creds = MagicMock()
+            mock_creds.valid = True
+            mock_gdrive.return_value = mock_creds
+
+            # Mock JIRA client initialization
+            with patch("agentllm.tools.jira_toolkit.JIRA", return_value=mock_jira_client):
+                # Run agent with user message
+                user_message = f"Create a roadmap for label '{SCENARIO_BASIC.labels[0]}'"
+
+                # Execute agent
+                result = rhai_agent.run(user_message)
+
+                # Extract agent output
+                agent_output = str(result.content) if hasattr(result, "content") else str(result)
+
+                # Run evaluation
+                score = run_accuracy_evaluation(
+                    agent_output=agent_output,
+                    expected_output=SCENARIO_BASIC.expected_output,
+                    evaluator_agent=evaluator_agent_completeness,
+                    eval_name="rhai_roadmap_completeness_basic_with_agent",
+                    aspect="completeness (agent execution)",
+                )
+
+                # Assert score threshold
+                assert (
+                    score >= 95.0
+                ), f"Completeness score {score} below threshold 95.0"
+
+
+@pytest.mark.integration
+class TestAccuracyEvaluation:
+    """Test accuracy aspect: issues placed in correct timeline sections."""
+
+    def test_basic_scenario_accuracy_with_agent(
+        self,
+        rhai_agent,
+        evaluator_agent_accuracy,
+        mock_jira_search,
+    ):
+        """Test timeline accuracy evaluation with actual agent execution."""
+        from unittest.mock import patch
+
+        # Create mock JIRA client
+        mock_search_fn = mock_jira_search(SCENARIO_BASIC.issues)
+        mock_jira_client = MagicMock()
+        mock_jira_client.search_issues = mock_search_fn
+
+        # Mock Google Drive credentials
+        with patch("agentllm.agents.toolkit_configs.gdrive_config.get_gdrive_credentials") as mock_gdrive:
+            mock_creds = MagicMock()
+            mock_creds.valid = True
+            mock_gdrive.return_value = mock_creds
+
+            # Mock JIRA client initialization
+            with patch("agentllm.tools.jira_toolkit.JIRA", return_value=mock_jira_client):
+                # Run agent
+                user_message = f"Create a roadmap for label '{SCENARIO_BASIC.labels[0]}'"
+                result = rhai_agent.run(user_message)
+
+                # Extract agent output
+                agent_output = str(result.content) if hasattr(result, "content") else str(result)
+
+                # Run evaluation
+                score = run_accuracy_evaluation(
+                    agent_output=agent_output,
+                    expected_output=SCENARIO_BASIC.expected_output,
+                    evaluator_agent=evaluator_agent_accuracy,
+                    eval_name="rhai_roadmap_accuracy_basic_with_agent",
+                    aspect="timeline accuracy (agent execution)",
+                )
+
+                # Assert score threshold
+                assert (
+                    score >= 95.0
+                ), f"Accuracy score {score} below threshold 95.0"
+
+
+@pytest.mark.integration
+class TestStructureEvaluation:
+    """Test structure aspect: proper markdown formatting."""
+
+    def test_basic_scenario_structure_with_agent(
+        self,
+        rhai_agent,
+        evaluator_agent_structure,
+        mock_jira_search,
+    ):
+        """Test markdown structure evaluation with actual agent execution."""
+        from unittest.mock import patch
+
+        # Create mock JIRA client
+        mock_search_fn = mock_jira_search(SCENARIO_BASIC.issues)
+        mock_jira_client = MagicMock()
+        mock_jira_client.search_issues = mock_search_fn
+
+        # Mock Google Drive credentials
+        with patch("agentllm.agents.toolkit_configs.gdrive_config.get_gdrive_credentials") as mock_gdrive:
+            mock_creds = MagicMock()
+            mock_creds.valid = True
+            mock_gdrive.return_value = mock_creds
+
+            # Mock JIRA client initialization
+            with patch("agentllm.tools.jira_toolkit.JIRA", return_value=mock_jira_client):
+                # Run agent
+                user_message = f"Create a roadmap for label '{SCENARIO_BASIC.labels[0]}'"
+                result = rhai_agent.run(user_message)
+
+                # Extract agent output
+                agent_output = str(result.content) if hasattr(result, "content") else str(result)
+
+                # Run evaluation
+                score = run_accuracy_evaluation(
+                    agent_output=agent_output,
+                    expected_output=SCENARIO_BASIC.expected_output,
+                    evaluator_agent=evaluator_agent_structure,
+                    eval_name="rhai_roadmap_structure_basic_with_agent",
+                    aspect="markdown structure (agent execution)",
+                )
+
+                # Assert score threshold
+                assert (
+                    score >= 95.0
+                ), f"Structure score {score} below threshold 95.0"
+
+
+@pytest.mark.integration
+class TestContentEvaluation:
+    """Test content aspect: correct issue metadata and descriptions."""
+
+    def test_basic_scenario_content_with_agent(
+        self,
+        rhai_agent,
+        evaluator_agent_content,
+        mock_jira_search,
+    ):
+        """Test content accuracy evaluation with actual agent execution."""
+        from unittest.mock import patch
+
+        # Create mock JIRA client
+        mock_search_fn = mock_jira_search(SCENARIO_BASIC.issues)
+        mock_jira_client = MagicMock()
+        mock_jira_client.search_issues = mock_search_fn
+
+        # Mock Google Drive credentials
+        with patch("agentllm.agents.toolkit_configs.gdrive_config.get_gdrive_credentials") as mock_gdrive:
+            mock_creds = MagicMock()
+            mock_creds.valid = True
+            mock_gdrive.return_value = mock_creds
+
+            # Mock JIRA client initialization
+            with patch("agentllm.tools.jira_toolkit.JIRA", return_value=mock_jira_client):
+                # Run agent
+                user_message = f"Create a roadmap for label '{SCENARIO_BASIC.labels[0]}'"
+                result = rhai_agent.run(user_message)
+
+                # Extract agent output
+                agent_output = str(result.content) if hasattr(result, "content") else str(result)
+
+                # Run evaluation
+                score = run_accuracy_evaluation(
+                    agent_output=agent_output,
+                    expected_output=SCENARIO_BASIC.expected_output,
+                    evaluator_agent=evaluator_agent_content,
+                    eval_name="rhai_roadmap_content_basic_with_agent",
+                    aspect="content accuracy (agent execution)",
+                )
+
+                # Assert score threshold
+                assert (
+                    score >= 95.0
+                ), f"Content score {score} below threshold 95.0"
