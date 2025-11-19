@@ -14,11 +14,11 @@ services:
       - .env.secrets         # Sensitive credentials (git-ignored)
     volumes:
       # Mount local code for development (hot reload)
-      - ./src/agentllm:/app/agentllm
+      - ./src/agentllm:/app/agentllm:rw,z
       # Persist database and workspace (local directory for easy access)
-      - ./tmp/agent-data:/app/tmp
+      - ./tmp/agent-data:/app/tmp:rw,z
       # Mount config from project root (for LiteLLM path resolution)
-      - ./proxy_config.yaml:/app/proxy_config.yaml:ro
+      - ./proxy_config.yaml:/app/proxy_config.yaml:ro,z
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8890/health/readiness"]
