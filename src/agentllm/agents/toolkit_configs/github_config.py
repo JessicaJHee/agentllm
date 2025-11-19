@@ -270,7 +270,7 @@ class GitHubConfig(BaseToolkitConfig):
         mentions_github = any(keyword in message_lower for keyword in github_keywords)
 
         if not mentions_github:
-            logger.info(f"ℹ️ Message doesn't mention GitHub keywords - skipping")
+            logger.info("ℹ️ Message doesn't mention GitHub keywords - skipping")
             return None
 
         logger.info(f"🔍 Message mentions GitHub, checking if user {user_id} is configured")
@@ -308,8 +308,8 @@ class GitHubConfig(BaseToolkitConfig):
         """
         if self.get_toolkit(user_id):
             return [
-                f"You have access to GitHub tools to manage pull request reviews. "
-                f"Use these tools when users ask about PR prioritization, review queues, or GitHub repositories."
+                "You have access to GitHub tools to manage pull request reviews. "
+                "Use these tools when users ask about PR prioritization, review queues, or GitHub repositories."
             ]
         return []
 

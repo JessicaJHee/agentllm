@@ -6,12 +6,12 @@ prioritization algorithms to suggest which PRs to review next.
 """
 
 import os
+from typing import Any
 
 from agno.db.sqlite import SqliteDb
 
-from agentllm.agents.base_agent import BaseAgentWrapper
-from agentllm.agents.toolkit_configs.base import BaseToolkitConfig
-from agentllm.agents.toolkit_configs.github_config import GitHubConfig
+from agentllm.agents.base import AgentFactory, BaseAgentWrapper
+from agentllm.agents.github_pr_prioritization_agent_configurator import GitHubReviewAgentConfigurator
 from agentllm.db import TokenStorage
 
 # Map GEMINI_API_KEY to GOOGLE_API_KEY if not set
@@ -39,6 +39,12 @@ class GitHubReviewAgent(BaseAgentWrapper):
 
     Toolkit Configuration:
     - GitHub: Personal access token for repository access (optional)
+
+    Architecture (NEW):
+    - Uses configurator pattern for clean separation of concerns
+    - GitHubReviewAgentConfigurator handles configuration management
+    - GitHubReviewAgent (BaseAgentWrapper) handles execution
+    - GitHubReviewAgentFactory enables plugin system registration
     """
 
     def __init__(
@@ -51,7 +57,7 @@ class GitHubReviewAgent(BaseAgentWrapper):
         max_tokens: int | None = None,
         **model_kwargs,
     ):
-        """Initialize the GitHub Review Agent.
+        """Initialize the GitHub Review Agent with configurator pattern.
 
         Args:
             shared_db: Shared database instance for session management
@@ -62,10 +68,10 @@ class GitHubReviewAgent(BaseAgentWrapper):
             max_tokens: Maximum tokens in response
             **model_kwargs: Additional model parameters
         """
-        # Store token_storage for toolkit config initialization
+        # Store token_storage for configurator
         self._token_storage = token_storage
 
-        # Call parent constructor (will call _initialize_toolkit_configs)
+        # Call parent constructor (will call _create_configurator)
         super().__init__(
             shared_db=shared_db,
             user_id=user_id,
@@ -75,101 +81,83 @@ class GitHubReviewAgent(BaseAgentWrapper):
             **model_kwargs,
         )
 
-    def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:
-        """Initialize toolkit configurations for GitHub Review Agent.
-
-        Returns:
-            List of toolkit configuration instances
-        """
-        return [
-            GitHubConfig(token_storage=self._token_storage),  # Optional: prompts when GitHub mentioned
-        ]
-
-    def _get_agent_name(self) -> str:
-        """Return agent name."""
-        return "github-pr-prioritization"
-
-    def _get_agent_description(self) -> str:
-        """Return agent description."""
-        return "GitHub PR Prioritization - Multi-factor scoring and intelligent queue management"
-
-    def _build_agent_instructions(self, user_id: str) -> list[str]:
-        """Build agent-specific instructions for GitHub Review Agent.
+    def _create_configurator(
+        self,
+        user_id: str,
+        session_id: str | None,
+        shared_db: SqliteDb,
+        **kwargs: Any,
+    ) -> GitHubReviewAgentConfigurator:
+        """Create GitHub Review Agent configurator instance.
 
         Args:
             user_id: User identifier
+            session_id: Session identifier
+            shared_db: Shared database
+            **kwargs: Additional parameters (temperature, max_tokens, etc.)
 
         Returns:
-            List of instruction strings
+            GitHubReviewAgentConfigurator instance
         """
-        return [
-            "You are a GitHub PR review assistant that helps developers manage their review queue efficiently.",
-            "",
-            "## Your Role",
-            "Help users prioritize pull requests and decide what to review next. The scoring and prioritization algorithms are handled by your tools - you focus on interpreting results and making recommendations.",
-            "",
-            "## How to Help Users",
-            "",
-            "### For General Queue Requests:",
-            "1. Use `prioritize_prs` to get scored PRs",
-            "2. Present results clearly with context about priority tiers",
-            "3. Highlight critical/urgent items (CRITICAL tier: 65-80 score)",
-            "",
-            "### For Next Review Recommendations:",
-            "1. Use `suggest_next_review` for intelligent recommendations",
-            "2. Explain the reasoning provided by the tool",
-            "3. Offer alternatives if the top recommendation isn't suitable",
-            "",
-            "### For Repository Health:",
-            "1. Use `get_repo_velocity` to show merge metrics",
-            "2. Interpret trends (avg time to merge, PRs per day)",
-            "3. Identify potential bottlenecks",
-            "",
-            "## Output Guidelines",
-            "- Use emojis for priority: 🔴 Critical (65-80), 🟡 High/Medium (35-64), 🟢 Low (0-34)",
-            "- Show score breakdowns when helpful (the tools provide them)",
-            "- Be conversational and actionable",
-            "- Explain WHY a PR is prioritized, not just the score",
-            "",
-            "## Example Interactions",
-            "",
-            '**User**: "Show me the review queue for facebook/react"',
-            "**You**: Use `prioritize_prs('facebook/react', 10)` and present top PRs with their scores and tiers",
-            "",
-            '**User**: "What should I review next?"',
-            "**You**: Use `suggest_next_review(repo, username)` and explain the recommendation",
-            "",
-            '**User**: "How\'s the team doing on reviews?"',
-            "**You**: Use `get_repo_velocity(repo, 7)` and interpret the metrics",
-        ]
+        return GitHubReviewAgentConfigurator(
+            user_id=user_id,
+            session_id=session_id,
+            shared_db=shared_db,
+            token_storage=self._token_storage,
+            **kwargs,
+        )
 
-    def _build_model_params(self) -> dict:
-        """Override to configure Gemini with native thinking capability.
+
+class GitHubReviewAgentFactory(AgentFactory):
+    """Factory for creating GitHub PR Prioritization Agent instances.
+
+    Registered via entry points in pyproject.toml for plugin system.
+    """
+
+    @staticmethod
+    def create_agent(
+        shared_db: Any,
+        token_storage: Any,
+        user_id: str,
+        session_id: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> GitHubReviewAgent:
+        """Create a GitHub Review Agent instance.
+
+        Args:
+            shared_db: Shared database instance (SqliteDb)
+            token_storage: Token storage instance (TokenStorage)
+            user_id: User ID for this agent instance
+            session_id: Optional session ID for conversation history
+            temperature: Optional temperature parameter for the model
+            max_tokens: Optional max tokens parameter for the model
+            **kwargs: Additional keyword arguments for the agent
 
         Returns:
-            Dictionary with base model params + thinking configuration
+            GitHubReviewAgent instance
         """
-        # Get base model params (id, temperature, max_output_tokens)
-        model_params = super()._build_model_params()
+        return GitHubReviewAgent(
+            shared_db=shared_db,
+            token_storage=token_storage,
+            user_id=user_id,
+            session_id=session_id,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
 
-        # Add Gemini native thinking parameters
-        model_params["thinking_budget"] = 200  # Allocate tokens for thinking
-        model_params["include_thoughts"] = True  # Request thought summaries
-
-        return model_params
-
-    def _get_agent_kwargs(self) -> dict:
-        """Get agent kwargs without Agno's reasoning agent.
-
-        We rely on Gemini's native thinking instead of Agno's ReasoningAgent.
+    @staticmethod
+    def get_metadata() -> dict[str, Any]:
+        """Get agent metadata for proxy configuration.
 
         Returns:
-            Dictionary with base defaults (NO reasoning=True)
+            Dictionary with agent metadata
         """
-        # Get base defaults (db, add_history_to_context, etc.)
-        kwargs = super()._get_agent_kwargs()
-
-        # DO NOT set reasoning=True - we use Gemini's native thinking
-        # Gemini will include thinking directly in response as <details> blocks
-
-        return kwargs
+        return {
+            "name": "github-pr-prioritization",
+            "description": "GitHub PR prioritization agent with intelligent review queue management",
+            "mode": "chat",
+            "requires_env": ["GEMINI_API_KEY"],  # or GOOGLE_API_KEY
+        }

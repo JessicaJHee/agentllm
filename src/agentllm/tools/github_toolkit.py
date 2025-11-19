@@ -3,7 +3,7 @@ GitHub toolkit for PR review prioritization and repository management.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import requests
@@ -139,9 +139,9 @@ class GitHubToolkit(Toolkit):
             # Build markdown output
             lines = [
                 f"## 📋 Pull Requests for `{repo}`",
-                f"",
+                "",
                 f"Showing {len(prs)} of {len(pr_list)} {state} PRs",
-                f"",
+                "",
             ]
 
             for pr in prs:
@@ -149,7 +149,7 @@ class GitHubToolkit(Toolkit):
                 created_at = pr.get("created_at", "")
                 try:
                     created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                    age_days = (datetime.now(timezone.utc) - created).days
+                    age_days = (datetime.now(UTC) - created).days
                     if age_days == 0:
                         age_str = "today"
                     elif age_days == 1:
@@ -491,7 +491,7 @@ class GitHubToolkit(Toolkit):
             closed_prs = response.json()
 
             # Filter to last N days and calculate metrics
-            cutoff_date = datetime.now(timezone.utc).timestamp() - (days * 86400)
+            cutoff_date = datetime.now(UTC).timestamp() - (days * 86400)
             recent_prs = []
 
             for pr in closed_prs:
@@ -561,7 +561,7 @@ class GitHubToolkit(Toolkit):
         created_at = pr.get("created_at", "")
         try:
             created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            age_days = (datetime.now(timezone.utc) - created).days
+            age_days = (datetime.now(UTC) - created).days
             age_score = min(age_days / 7.0, 1.0) * 25
         except Exception:
             age_score = 0

@@ -1,7 +1,6 @@
 """Tests for GitHub Review Prioritization Agent."""
 
-import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -37,7 +36,7 @@ class TestPRScoring:
         Returns:
             Dictionary representing a PR
         """
-        created_at = datetime.now(timezone.utc) - timedelta(days=age_days)
+        created_at = datetime.now(UTC) - timedelta(days=age_days)
         return {
             "number": number,
             "title": title,
