@@ -26,6 +26,14 @@ model_list:
       description: "Demo agent showcasing AgentLLM features with favorite color configuration and simple tools"
       mode: chat
 
+  - model_name: agno/github-pr-prioritization
+    litellm_params:
+      model: agno/github-pr-prioritization
+      custom_llm_provider: agno
+    model_info:
+      description: "GitHub PR Prioritization - Multi-factor scoring and intelligent review queue management"
+      mode: chat
+
   # Google Gemini 2.5 models
   - model_name: gemini-2.5-pro
     litellm_params:

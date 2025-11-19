@@ -216,6 +216,76 @@ LiteLLM `CustomLLM` requires **GenericStreamingChunk**, NOT `ModelResponse`:
        custom_llm_provider: agno
    ```
 
+## Available Agents
+
+### GitHub PR Prioritization (`agno/github-pr-prioritization`)
+
+**Purpose**: Intelligent PR review queue management using multi-factor prioritization.
+
+**Setup**:
+1. Create GitHub personal access token:
+   - Go to https://github.com/settings/tokens
+   - Choose either:
+     - **Fine-grained token** (recommended): Click "Generate new token (fine-grained)"
+       - Select repository access and permissions
+       - Token format: `github_pat_...`
+     - **Classic token**: Click "Generate new token (classic)"
+       - Select `repo` scope (full control of private repositories)
+       - Token format: `ghp_...`
+   - Copy the token
+2. In chat: "My GitHub token is YOUR_TOKEN_HERE"
+3. Agent validates and stores token securely
+
+**Usage Examples**:
+- "Show review queue for facebook/react"
+- "What should I review next in owner/repo?"
+- "Prioritize PRs in microsoft/vscode"
+- "Analyze PR #12345 in owner/repo"
+- "Team review velocity for the last 7 days"
+
+**Prioritization Algorithm**:
+
+Multi-factor scoring (0-80 scale) with weighted factors:
+- **Age (25 pts)**: Older PRs get higher priority (capped at 7 days)
+- **Size (20 pts)**: Smaller PRs score higher (penalized after 100 lines)
+- **Activity (15 pts)**: Comments and review activity indicate importance
+- **Labels (10 pts)**: urgent/hotfix/blocking/critical labels boost priority
+- **Author (10 pts)**: Base score for all contributors
+
+**Priority Tiers**:
+- **CRITICAL (65-80)**: Hotfixes, urgent, blocking issues
+- **HIGH (50-64)**: Aged PRs, active discussion
+- **MEDIUM (35-49)**: Standard PRs ready for review
+- **LOW (0-34)**: WIP, drafts
+
+**Special Rules**:
+- **Draft Exclusion**: Draft PRs are skipped unless requested
+- **Label Boost**: urgent/hotfix/blocking/critical labels add 10 points
+- **High Priority Labels**: high-priority/important labels add 7 points
+
+**Output Format**:
+Agent provides scored PR list with detailed breakdown, emoji indicators (🔴 Critical, 🟡 Medium, 🟢 Low), and clear recommendation for next review.
+
+**Key Features**:
+- Transparent score breakdowns showing exactly why each PR is prioritized
+- Review queue filtering (exclude drafts, filter by state)
+- Smart suggestions with reasoning and alternatives
+- Repository velocity tracking (merged PRs, avg time to merge)
+- Repository-scoped operations (can manage multiple repos)
+
+**Implementation Details**:
+- Toolkit: `GitHubToolkit` (`src/agentllm/tools/github_toolkit.py`)
+- Configuration: `GitHubConfig` (`src/agentllm/agents/toolkit_configs/github_config.py`)
+- Agent: `GitHubReviewAgent` (`src/agentllm/agents/github_pr_prioritization_agent.py`)
+- Token storage: Database-backed via `TokenStorage.upsert_github_token()`
+- Optional toolkit: Only prompts when GitHub/PRs mentioned
+
+**Tools Available**:
+- `list_prs(repo, state, limit)` - Simple markdown list of PRs with high-level info (no scoring)
+- `prioritize_prs(repo, limit)` - Score and rank PRs with detailed breakdown
+- `suggest_next_review(repo, reviewer)` - Smart recommendation with reasoning
+- `get_repo_velocity(repo, days)` - Repository merge velocity metrics (all authors)
+
 ## Key Files
 
 ```
@@ -230,8 +300,11 @@ src/agentllm/
 │   │   └── toolkit_config.py      #   BaseToolkitConfig (re-export)
 │   ├── release_manager.py         # Production agent wrapper
 │   ├── demo_agent.py              # Reference implementation
+│   ├── github_pr_prioritization_agent.py  # GitHub PR review agent
 │   └── toolkit_configs/           # Toolkit config implementations
-├── tools/                         # Agno toolkits
+│       └── github_config.py       # GitHub token & toolkit config
+├── tools/
+│   └── github_toolkit.py          # GitHub PR review tools
 └── db/token_storage.py            # SQLite credential storage
 ```
 

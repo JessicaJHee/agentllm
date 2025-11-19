@@ -61,6 +61,20 @@ class GoogleDriveToken(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class GitHubToken(Base):
+    """Table for storing GitHub API tokens."""
+
+    __tablename__ = "github_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    token = Column(String, nullable=False)
+    server_url = Column(String, nullable=False, default="https://api.github.com")
+    username = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class TokenStorage:
     """SQLite-based storage for API tokens and OAuth credentials."""
 
@@ -387,6 +401,111 @@ class TokenStorage:
             logger.error(f"Error deleting Google Drive token for user {user_id}: {e}")
             return False
 
+    # GitHub Token Operations
+
+    def upsert_github_token(
+        self,
+        user_id: str,
+        token: str,
+        server_url: str = "https://api.github.com",
+        username: str | None = None,
+    ) -> bool:
+        """Store or update GitHub API token for a user.
+
+        Args:
+            user_id: Unique user identifier
+            token: GitHub personal access token
+            server_url: GitHub API server URL (default: "https://api.github.com")
+            username: Optional GitHub username
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.Session() as sess:
+                # Check if token exists
+                existing = sess.query(GitHubToken).filter_by(user_id=user_id).first()
+
+                if existing:
+                    # Update existing token
+                    existing.token = token
+                    existing.server_url = server_url
+                    existing.username = username
+                    existing.updated_at = datetime.utcnow()
+                    logger.debug(f"Updating GitHub token for user {user_id}")
+                else:
+                    # Insert new token
+                    new_token = GitHubToken(
+                        user_id=user_id,
+                        token=token,
+                        server_url=server_url,
+                        username=username,
+                    )
+                    sess.add(new_token)
+                    logger.debug(f"Inserting new GitHub token for user {user_id}")
+
+                sess.commit()
+                return True
+
+        except Exception as e:
+            logger.error(f"Error upserting GitHub token for user {user_id}: {e}")
+            return False
+
+    def get_github_token(self, user_id: str) -> dict[str, Any] | None:
+        """Retrieve GitHub token for a user.
+
+        Args:
+            user_id: Unique user identifier
+
+        Returns:
+            Dictionary with token data, or None if not found
+        """
+        try:
+            with self.Session() as sess:
+                token_record = sess.query(GitHubToken).filter_by(user_id=user_id).first()
+
+                if token_record:
+                    return {
+                        "user_id": token_record.user_id,
+                        "token": token_record.token,
+                        "server_url": token_record.server_url,
+                        "username": token_record.username,
+                        "created_at": token_record.created_at,
+                        "updated_at": token_record.updated_at,
+                    }
+
+                return None
+
+        except Exception as e:
+            logger.error(f"Error retrieving GitHub token for user {user_id}: {e}")
+            return None
+
+    def delete_github_token(self, user_id: str) -> bool:
+        """Delete GitHub token for a user.
+
+        Args:
+            user_id: Unique user identifier
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.Session() as sess:
+                token_record = sess.query(GitHubToken).filter_by(user_id=user_id).first()
+
+                if token_record:
+                    sess.delete(token_record)
+                    sess.commit()
+                    logger.debug(f"Deleted GitHub token for user {user_id}")
+                    return True
+
+                logger.warning(f"No GitHub token found for user {user_id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error deleting GitHub token for user {user_id}: {e}")
+            return False
+
     # Utility Methods
 
     def list_users_with_jira_tokens(self) -> list[str]:
@@ -417,6 +536,21 @@ class TokenStorage:
 
         except Exception as e:
             logger.error(f"Error listing users with Google Drive tokens: {e}")
+            return []
+
+    def list_users_with_github_tokens(self) -> list[str]:
+        """Get list of all user IDs with stored GitHub tokens.
+
+        Returns:
+            List of user IDs
+        """
+        try:
+            with self.Session() as sess:
+                results = sess.query(GitHubToken.user_id).all()
+                return [r[0] for r in results]
+
+        except Exception as e:
+            logger.error(f"Error listing users with GitHub tokens: {e}")
             return []
 
     def close(self):
