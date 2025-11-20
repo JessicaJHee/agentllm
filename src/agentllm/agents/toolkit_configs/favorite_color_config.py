@@ -23,7 +23,7 @@ class FavoriteColorConfig(BaseToolkitConfig):
     - Required configuration flow (prompts immediately on first use)
     - Natural language extraction from user messages
     - Simple validation logic
-    - In-memory storage (no database required)
+    - Database persistence via TokenStorage (survives proxy restarts)
     - Extensive logging for educational purposes
     """
 
@@ -47,16 +47,17 @@ class FavoriteColorConfig(BaseToolkitConfig):
         Initialize FavoriteColorConfig.
 
         Args:
-            token_storage: Optional token storage (not used in this simple example)
+            token_storage: TokenStorage instance for persistent storage
         """
         logger.debug("=" * 80)
         logger.debug("FavoriteColorConfig.__init__() called")
         super().__init__(token_storage)
 
-        # In-memory storage: user_id -> color
-        self._user_colors: dict[str, str] = {}
+        # Store token_storage for database persistence
+        self.token_storage = token_storage
 
         logger.debug(f"Initialized with valid colors: {', '.join(self.VALID_COLORS)}")
+        logger.debug(f"Token storage: {type(token_storage).__name__ if token_storage else 'None'}")
         logger.debug("=" * 80)
 
     def is_required(self) -> bool:
@@ -77,15 +78,21 @@ class FavoriteColorConfig(BaseToolkitConfig):
             user_id: User identifier
 
         Returns:
-            True if color is stored, False otherwise
+            True if color is stored in database, False otherwise
         """
         logger.debug("=" * 80)
         logger.debug(f"is_configured() called for user_id={user_id}")
 
-        configured = user_id in self._user_colors
+        if not self.token_storage:
+            logger.warning("No token storage available, cannot check configuration")
+            logger.debug("=" * 80)
+            return False
+
+        # Check database for stored color
+        color = self.token_storage.get_favorite_color(user_id)
+        configured = color is not None
 
         if configured:
-            color = self._user_colors[user_id]
             logger.info(f"User {user_id} IS configured with color: {color}")
         else:
             logger.info(f"User {user_id} is NOT configured yet")
@@ -140,10 +147,24 @@ class FavoriteColorConfig(BaseToolkitConfig):
 
         logger.info(f"✅ Color '{color}' is valid")
 
-        # Store the color
-        self._user_colors[user_id] = color
-        logger.info(f"✅ Stored color '{color}' for user {user_id}")
-        logger.debug(f"Current user colors storage: {self._user_colors}")
+        # Store the color in database
+        if not self.token_storage:
+            error_msg = "❌ No token storage available, cannot save configuration"
+            logger.error(error_msg)
+            logger.info("<<< extract_and_store_config() FINISHED (storage error)")
+            logger.debug("=" * 80)
+            raise ValueError(error_msg)
+
+        success = self.token_storage.upsert_favorite_color(user_id, color)
+
+        if not success:
+            error_msg = "❌ Failed to save favorite color to database"
+            logger.error(error_msg)
+            logger.info("<<< extract_and_store_config() FINISHED (database error)")
+            logger.debug("=" * 80)
+            raise ValueError(error_msg)
+
+        logger.info(f"✅ Stored color '{color}' in database for user {user_id}")
 
         # Create confirmation message
         confirmation = (
@@ -322,7 +343,13 @@ class FavoriteColorConfig(BaseToolkitConfig):
             logger.debug("=" * 80)
             return []
 
-        color = self._user_colors[user_id]
+        # Retrieve color from database
+        color = self.get_user_color(user_id)
+
+        if not color:
+            logger.warning(f"User {user_id} is configured but color retrieval failed")
+            logger.debug("=" * 80)
+            return []
 
         instructions = [
             f"The user's favorite color is {color}.",
@@ -338,7 +365,7 @@ class FavoriteColorConfig(BaseToolkitConfig):
 
     def get_user_color(self, user_id: str) -> str | None:
         """
-        Get the stored favorite color for a user.
+        Get the stored favorite color for a user from database.
 
         This is a helper method for other components (like ColorTools)
         to access the configured color.
@@ -350,8 +377,13 @@ class FavoriteColorConfig(BaseToolkitConfig):
             Color string or None if not configured
         """
         logger.debug(f"get_user_color() called for user_id={user_id}")
-        color = self._user_colors.get(user_id)
-        logger.debug(f"Returning color: {color}")
+
+        if not self.token_storage:
+            logger.warning("No token storage available, cannot retrieve color")
+            return None
+
+        color = self.token_storage.get_favorite_color(user_id)
+        logger.debug(f"Returning color from database: {color}")
         return color
 
     def requires_agent_recreation(self, config_name: str) -> bool:

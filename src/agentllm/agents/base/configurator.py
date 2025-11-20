@@ -130,22 +130,75 @@ class AgentConfigurator(ABC):
         """
         return "gemini-2.5-flash"
 
+    def _get_knowledge_config(self) -> dict[str, Any] | None:
+        """Override to provide knowledge base configuration for this agent.
+
+        This method enables RAG (Retrieval Augmented Generation) by specifying:
+        - knowledge_path: Path to knowledge base files (markdown, PDF, CSV)
+        - table_name: LanceDB table name for vector storage
+        - vector_db_path: (optional) Custom vector database directory
+
+        Returns:
+            None (default - no knowledge base) or dict with config:
+                {
+                    "knowledge_path": "examples/my_agent_knowledge",
+                    "table_name": "my_agent_knowledge",
+                    "vector_db_path": "custom/path"  # optional
+                }
+
+        Example:
+            def _get_knowledge_config(self) -> dict[str, Any] | None:
+                return {
+                    "knowledge_path": "examples/demo_knowledge",
+                    "table_name": "demo_agent_knowledge"
+                }
+        """
+        return None
+
     def _get_agent_kwargs(self) -> dict[str, Any]:
         """Get all Agent constructor keyword arguments.
 
         This is the main method for customizing Agent creation. Override this
         method and call super() to extend the base defaults with your own parameters.
 
+        This base implementation also handles knowledge base loading if
+        _get_knowledge_config() is implemented by the subclass.
+
         Returns:
             Dict of Agent constructor kwargs
         """
-        return {
+        kwargs = {
             "db": self._shared_db,
             "add_history_to_context": True,
             "num_history_runs": 10,
             "read_chat_history": True,
             "markdown": True,
         }
+
+        # Handle knowledge base loading if configured
+        knowledge_config = self._get_knowledge_config()
+        if knowledge_config is not None:
+            from agentllm.knowledge import KnowledgeManagerFactory
+
+            agent_name = self._get_agent_name()
+            logger.info(f"Requesting knowledge base for {agent_name}...")
+            logger.debug(f"Knowledge config: {knowledge_config}")
+
+            # Get or create knowledge manager for this agent type
+            # Factory will log cache hit/miss
+            knowledge_manager = KnowledgeManagerFactory.get_or_create(agent_name=agent_name, config=knowledge_config)
+
+            # Load knowledge (lazy loading, cached after first call within manager)
+            logger.debug(f"Calling knowledge_manager.load_knowledge() for {agent_name}...")
+            knowledge = knowledge_manager.load_knowledge()
+            logger.debug(f"Knowledge object received: {type(knowledge).__name__}")
+
+            # Add to agent kwargs
+            kwargs["knowledge"] = knowledge
+            kwargs["search_knowledge"] = True
+            logger.info(f"✅ Knowledge base integrated into agent {agent_name}")
+
+        return kwargs
 
     def _on_config_stored(self, config: BaseToolkitConfig) -> None:  # noqa: B027
         """Hook called after a config is stored.

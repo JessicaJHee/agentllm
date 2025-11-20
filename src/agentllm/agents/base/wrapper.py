@@ -1,6 +1,7 @@
 """Base agent wrapper class for LiteLLM integration with configurator pattern."""
 
 import json
+import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any
@@ -55,7 +56,9 @@ class BaseAgentWrapper(ABC):
             session_id: Session identifier (optional)
             temperature: Model temperature (0.0-2.0)
             max_tokens: Maximum tokens in response
-            **model_kwargs: Additional model parameters
+            **model_kwargs: Additional model parameters, including:
+                - max_tool_result_length: Max chars for tool results in UI
+                  (defaults to AGENTLLM_MAX_TOOL_RESULT_LENGTH env var, then None)
         """
         logger.debug("=" * 80)
         logger.info(f"{self.__class__.__name__}.__init__() called")
@@ -67,6 +70,24 @@ class BaseAgentWrapper(ABC):
         # Store user and session identifiers
         self._user_id = user_id
         self._session_id = session_id
+
+        # Configure UI display options with priority:
+        # 1. Explicit kwarg (agent-specific override)
+        # 2. Environment variable (global default)
+        # 3. None (no truncation)
+        max_tool_result_length = model_kwargs.pop("max_tool_result_length", None)
+        if max_tool_result_length is None:
+            # Check environment variable for global default
+            env_limit = os.getenv("AGENTLLM_MAX_TOOL_RESULT_LENGTH")
+            if env_limit is not None:
+                try:
+                    max_tool_result_length = int(env_limit)
+                    logger.debug(f"Using AGENTLLM_MAX_TOOL_RESULT_LENGTH={max_tool_result_length} from env")
+                except ValueError:
+                    logger.warning(f"Invalid AGENTLLM_MAX_TOOL_RESULT_LENGTH='{env_limit}', ignoring")
+
+        self._max_tool_result_length = max_tool_result_length
+        logger.debug(f"Tool result truncation: {max_tool_result_length or 'disabled'}")
 
         # Create configurator (subclass-specific)
         logger.debug("Creating configurator...")
@@ -130,6 +151,61 @@ class BaseAgentWrapper(ABC):
             else:
                 formatted.append(">")
         return "\n".join(formatted)
+
+    def _format_tool_result(self, result: Any) -> str:
+        """Format tool result with optional truncation and JSON formatting for Open WebUI.
+
+        Args:
+            result: Raw tool result (can be dict, list, str, or any object)
+
+        Returns:
+            Formatted string with optional truncation and JSON syntax highlighting
+        """
+        # Convert to string first (handles all types)
+        result_str = str(result) if not isinstance(result, str) else result
+
+        # Try to detect and format JSON (whether it's a dict/list or JSON string)
+        is_json = False
+        json_content = None
+
+        # Case 1: Result is already a dict or list
+        if isinstance(result, (dict, list)):
+            try:
+                json_content = json.dumps(result, indent=2, ensure_ascii=False)
+                is_json = True
+            except (TypeError, ValueError) as e:
+                logger.debug(f"Failed to JSON-serialize dict/list: {e}")
+
+        # Case 2: Result is a string that might be JSON
+        elif isinstance(result, str):
+            # Try to parse as JSON to validate
+            try:
+                parsed = json.loads(result)
+                # Re-serialize with nice formatting
+                json_content = json.dumps(parsed, indent=2, ensure_ascii=False)
+                is_json = True
+            except (json.JSONDecodeError, TypeError, ValueError):
+                # Not valid JSON, treat as plain text
+                pass
+
+        # Format based on whether it's JSON or plain text
+        if is_json and json_content:
+            # Apply truncation to JSON
+            if self._max_tool_result_length and len(json_content) > self._max_tool_result_length:
+                original_length = len(json_content)
+                json_content = json_content[: self._max_tool_result_length]
+                truncation_notice = f"\n\n... (truncated, {original_length:,} chars total)"
+                # Return with JSON code block
+                return f"```json\n{json_content}{truncation_notice}\n```"
+            else:
+                return f"```json\n{json_content}\n```"
+        else:
+            # Plain text: apply truncation if needed
+            if self._max_tool_result_length and len(result_str) > self._max_tool_result_length:
+                original_length = len(result_str)
+                result_str = result_str[: self._max_tool_result_length]
+                result_str += f"\n\n... (truncated, {original_length:,} chars total)"
+            return result_str
 
     def _get_or_create_agent(self) -> Agent:
         """Get or create the underlying Agno agent.
@@ -379,6 +455,7 @@ class BaseAgentWrapper(ABC):
                 stream_events=True,
                 user_id=self._user_id,
                 session_id=effective_session_id,
+                **kwargs,
             )
 
             # Track reasoning state
@@ -461,12 +538,17 @@ class BaseAgentWrapper(ABC):
 
                             logger.info(f"✅ ToolCallCompletedEvent: {tool_name}")
 
-                            args_json = json.dumps(tool_args, indent=2) if tool_args else "{}"
+                            # Format arguments as JSON
+                            args_json = json.dumps(tool_args, indent=2, ensure_ascii=False) if tool_args else "{}"
+
+                            # Format result with truncation and JSON detection
+                            formatted_result = self._format_tool_result(tool_result)
+
                             completion_text = (
                                 f'\n<details type="tool_call" open="true">\n'
                                 f"<summary>🔧 Tool: {tool_name}</summary>\n\n"
                                 f"**Arguments:**\n```json\n{args_json}\n```\n\n"
-                                f"**Result:**\n\n{tool_result}\n\n"
+                                f"**Result:**\n\n{formatted_result}\n\n"
                                 f"✅ Completed\n</details>\n\n"
                             )
 

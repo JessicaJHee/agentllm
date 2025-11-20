@@ -75,6 +75,18 @@ class GitHubToken(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class FavoriteColor(Base):
+    """Table for storing user favorite colors (demo agent)."""
+
+    __tablename__ = "favorite_colors"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    color = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class TokenStorage:
     """SQLite-based storage for API tokens and OAuth credentials."""
 
@@ -504,6 +516,94 @@ class TokenStorage:
 
         except Exception as e:
             logger.error(f"Error deleting GitHub token for user {user_id}: {e}")
+            return False
+
+    # Favorite Color Operations
+
+    def upsert_favorite_color(self, user_id: str, color: str) -> bool:
+        """Store or update favorite color for a user.
+
+        Args:
+            user_id: Unique user identifier
+            color: Favorite color name
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.Session() as sess:
+                # Check if color exists
+                existing = sess.query(FavoriteColor).filter_by(user_id=user_id).first()
+
+                if existing:
+                    # Update existing color
+                    existing.color = color
+                    existing.updated_at = datetime.utcnow()
+                    logger.debug(f"Updating favorite color for user {user_id} to {color}")
+                else:
+                    # Insert new color
+                    new_color = FavoriteColor(
+                        user_id=user_id,
+                        color=color,
+                    )
+                    sess.add(new_color)
+                    logger.debug(f"Inserting new favorite color for user {user_id}: {color}")
+
+                sess.commit()
+                return True
+
+        except Exception as e:
+            logger.error(f"Error upserting favorite color for user {user_id}: {e}")
+            return False
+
+    def get_favorite_color(self, user_id: str) -> str | None:
+        """Retrieve favorite color for a user.
+
+        Args:
+            user_id: Unique user identifier
+
+        Returns:
+            Color string, or None if not found
+        """
+        try:
+            with self.Session() as sess:
+                color_record = sess.query(FavoriteColor).filter_by(user_id=user_id).first()
+
+                if color_record:
+                    logger.debug(f"Retrieved favorite color for user {user_id}: {color_record.color}")
+                    return color_record.color
+
+                logger.debug(f"No favorite color found for user {user_id}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error retrieving favorite color for user {user_id}: {e}")
+            return None
+
+    def delete_favorite_color(self, user_id: str) -> bool:
+        """Delete favorite color for a user.
+
+        Args:
+            user_id: Unique user identifier
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.Session() as sess:
+                color_record = sess.query(FavoriteColor).filter_by(user_id=user_id).first()
+
+                if color_record:
+                    sess.delete(color_record)
+                    sess.commit()
+                    logger.debug(f"Deleted favorite color for user {user_id}")
+                    return True
+
+                logger.warning(f"No favorite color found for user {user_id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error deleting favorite color for user {user_id}: {e}")
             return False
 
     # Utility Methods

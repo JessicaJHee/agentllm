@@ -142,6 +142,10 @@ class DemoAgentFactory(AgentFactory):
         Returns:
             DemoAgent instance
         """
+        # Set demo-specific UI truncation (overrides env var if set)
+        # This keeps knowledge search results clean in the UI
+        kwargs.setdefault("max_tool_result_length", 500)
+
         return DemoAgent(
             shared_db=shared_db,
             token_storage=token_storage,

@@ -11,6 +11,10 @@ dependencies = [
   "html-to-markdown>=1.0.0",
   "anthropic>=0.72.1",
   "rich>=13.7.1",
+  "lancedb>=0.17.0",
+  "tantivy>=0.22.0",
+  "pypdf>=5.1.0",
+  "pandas>=2.0.0",
 ]
 description = "Custom LiteLLM provider for Agno agents - OpenAI-compatible API for Agno"
 name = "agentllm"
@@ -34,6 +38,7 @@ requires = ["hatchling"]
 asyncio_default_fixture_loop_scope = "function"
 markers = [
   "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+  "eval: marks tests as accuracy evaluation tests (may be slow, deselect with '-m \"not eval\"')",
 ]
 python_classes = ["Test*"]
 python_files = ["test_*.py"]

@@ -67,6 +67,14 @@ class DemoAgentConfigurator(AgentConfigurator):
         """
         return "A demo agent showcasing AgentLLM features"
 
+    def _get_knowledge_config(self) -> dict[str, Any] | None:
+        """Get knowledge base configuration for Demo Agent.
+
+        Returns:
+            dict: Knowledge configuration with knowledge_path and table_name
+        """
+        return {"knowledge_path": "examples/knowledge", "table_name": "demo_knowledge"}
+
     def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:
         """Initialize toolkit configurations for Demo Agent.
 
@@ -94,6 +102,16 @@ class DemoAgentConfigurator(AgentConfigurator):
             "4. Session memory and conversation history",
             "",
             "🎭 **Interactive Demo Flow:**",
+            "",
+            "**INITIAL GREETING - When Asked About Capabilities:**",
+            "- When users ask 'What can you help me with?' or similar greeting questions:",
+            "  1. Warmly introduce yourself as the Demo Agent",
+            "  2. **List all your main capabilities:**",
+            "     * Color tools (palette generation, color schemes)",
+            "     * Knowledge base (AcmeViz Inc, Zorbonian Recipes, QuantumFlux API)",
+            "     * Interactive demo features",
+            "  3. Then guide them to the next appropriate step in the demo flow",
+            "- Be comprehensive but concise - they should know the full scope of what you can do",
             "",
             "**STEP 1 - Configuration (Required First):**",
             "- If user hasn't configured their favorite color, warmly welcome them",
@@ -123,6 +141,16 @@ class DemoAgentConfigurator(AgentConfigurator):
             "2. `format_text_with_theme` - Formats text with color themes",
             "3. `design_color_scheme_for_purpose` - Complex tool requiring reasoning (the star of the demo!)",
             "",
+            "⚠️ **CRITICAL - When to Use Tools:**",
+            "- **ALWAYS use `generate_color_palette` tool** when user asks to:",
+            "  * Generate a color palette",
+            "  * Create complementary/analogous/monochromatic colors",
+            "  * See color harmonies or color schemes",
+            "  * Get hex codes for colors",
+            "- **DO NOT** just describe colors - CALL THE TOOL to generate actual hex codes",
+            "- **ALWAYS** include the hex codes from the tool output in your response",
+            "- Example: When asked 'Generate a complementary palette', use the tool and show the hex codes it returns",
+            "",
             "💬 **Communication Style:**",
             "- Be enthusiastic and friendly - you're giving a demo!",
             "- Guide users proactively through the steps",
@@ -147,6 +175,17 @@ class DemoAgentConfigurator(AgentConfigurator):
             "- Changing the color recreates your agent with updated tools",
             "- This pattern is reused for real agents (Google Drive OAuth, Jira tokens, etc.)",
             "",
+            "📚 **RAG Knowledge Base:**",
+            "- I have access to a specialized knowledge base with detailed information about specific topics",
+            "- Knowledge includes:",
+            "  * AcmeViz Inc. - A data visualization company specializing in quantum analytics",
+            "  * Zorbonian Recipes - Culinary creations from planet Zorbon-7 in the Nebula Sector",
+            "  * QuantumFlux API - Technical documentation for quantum-entanglement data streaming",
+            "- When users ask about these topics, answer using information from my knowledge base",
+            "- Provide accurate, detailed answers based on the retrieved knowledge",
+            "- Examples of questions I can answer: 'What is AcmeViz Inc?', 'Tell me about Crystallized Moonberry Tartlets', 'How do I create a quantum entanglement?'",
+            "- The knowledge retrieval happens automatically when questions match the content",
+            "",
             "⚡ **Key Points:**",
             "- Always guide users through the demo steps in order",
             "- Be proactive in suggesting next steps",
@@ -169,13 +208,14 @@ class DemoAgentConfigurator(AgentConfigurator):
         return params
 
     def _get_agent_kwargs(self) -> dict[str, Any]:
-        """Get agent kwargs without Agno's reasoning agent.
+        """Get agent kwargs with Gemini native thinking.
 
-        We rely on Gemini's native thinking instead of Agno's ReasoningAgent pattern.
+        Knowledge loading is handled by base class via _get_knowledge_config().
 
         Returns:
             dict: Agent constructor parameters
         """
+        # Base class handles knowledge loading via _get_knowledge_config()
         kwargs = super()._get_agent_kwargs()
 
         # DO NOT set reasoning=True here!

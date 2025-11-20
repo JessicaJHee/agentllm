@@ -59,6 +59,23 @@ class ColorTools(Toolkit):
             "brown": ["orange", "red"],
         }
 
+        # Hex code mappings for colors
+        self._color_hex_codes = {
+            "red": "#FF0000",
+            "green": "#00FF00",
+            "blue": "#0000FF",
+            "orange": "#FFA500",
+            "yellow": "#FFFF00",
+            "purple": "#800080",
+            "pink": "#FFC0CB",
+            "black": "#000000",
+            "white": "#FFFFFF",
+            "brown": "#A52A2A",
+            "gray": "#808080",
+            "silver": "#C0C0C0",
+            "darkseagreen4": "#698B69",
+        }
+
         # Color mood mappings for intelligent scheme design
         self._color_moods = {
             "red": {"energy": 9, "warmth": 8, "calm": 2, "professional": 5, "creativity": 7},
@@ -143,20 +160,22 @@ class ColorTools(Toolkit):
             return f"❌ Error: {error_msg}"
 
     def _generate_complementary_palette(self) -> str:
-        """Generate complementary color palette."""
+        """Generate complementary color palette with hex codes."""
         logger.debug("_generate_complementary_palette() called")
 
         complement = self._complementary_colors.get(self.favorite_color, "gray")
+        base_hex = self._color_hex_codes.get(self.favorite_color, "#808080")
+        complement_hex = self._color_hex_codes.get(complement, "#808080")
 
         palette = (
             f"**Complementary Color Palette**\n\n"
-            f"🎨 **Base Color:** {self.favorite_color.title()}\n"
-            f"🎨 **Complementary:** {complement.title()}\n\n"
+            f"🎨 **Base Color:** {self.favorite_color.title()} (`{base_hex}`)\n"
+            f"🎨 **Complementary:** {complement.title()} (`{complement_hex}`)\n\n"
             f"This palette creates strong contrast and visual interest. "
             f"Complementary colors are opposite each other on the color wheel."
         )
 
-        logger.debug(f"Generated palette with complement: {complement}")
+        logger.debug(f"Generated palette with complement: {complement} ({complement_hex})")
         return palette
 
     def _generate_analogous_palette(self) -> str:

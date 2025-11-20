@@ -119,6 +119,30 @@ LiteLLM `CustomLLM` requires **GenericStreamingChunk**, NOT `ModelResponse`:
 }
 ```
 
+### Knowledge Management System (RAG)
+
+AgentLLM supports per-agent knowledge bases via **Retrieval-Augmented Generation (RAG)**. Each agent can have its own vector database and document collection for enhanced context.
+
+**Quick Start**: Override `_get_knowledge_config()` in your agent configurator:
+
+```python
+def _get_knowledge_config(self) -> dict[str, Any] | None:
+    return {
+        "knowledge_path": "examples/my_knowledge",  # Path to MD/PDF/CSV files
+        "table_name": "my_agent_knowledge"          # LanceDB table name
+    }
+```
+
+That's it! Knowledge loading, indexing, and retrieval are handled automatically.
+
+**Key Features**:
+- Per-agent knowledge bases (no sharing between agent types)
+- Lazy loading with persistence (fast startup, cached after first index)
+- Hybrid search (vector + keyword)
+- Optional (return `None` to disable)
+
+📖 **See [docs/knowledge-management.md](../docs/knowledge-management.md) for complete documentation**
+
 ## Adding New Agents
 
 ### Modern Approach (Plugin System)
@@ -139,6 +163,14 @@ LiteLLM `CustomLLM` requires **GenericStreamingChunk**, NOT `ModelResponse`:
 
        def _get_agent_description(self) -> str:
            return "My agent description"
+
+       def _get_knowledge_config(self) -> dict[str, Any] | None:
+           """Override to enable RAG knowledge base (optional)."""
+           return {
+               "knowledge_path": "examples/my_agent_knowledge",
+               "table_name": "my_agent_knowledge"
+           }
+           # Return None to disable knowledge for this agent
    ```
 
 2. **Create BaseAgentWrapper** (`src/agentllm/agents/my_agent.py`):
