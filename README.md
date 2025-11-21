@@ -27,6 +27,7 @@ podman compose up
 
 **Available Agents:**
 - `agno/release-manager` - RHDH release management assistant
+- `agno/sprint-reviewer` - Sprint review assistant
 - `agno/demo-agent` - Example agent with color tools
 
 > **Note:** Agent data (session history, credentials) is stored in the `tmp/` directory, which persists across restarts.
@@ -130,6 +131,7 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 
 **Agno Agents** (powered by Gemini 2.5 Flash):
 - `agno/release-manager` - RHDH release management assistant (Google Drive, Jira integration)
+- `agno/sprint-reviewer` - Sprint review assistant (Google Drive, Jira integration)
 - `agno/demo-agent` - Example agent with color tools (educational reference)
 
 **Direct Gemini Models:**
@@ -326,6 +328,8 @@ agentllm/
 │   │   ├── release_manager_configurator.py  # Release manager config
 │   │   ├── demo_agent.py              # Demo agent (reference impl)
 │   │   ├── demo_agent_configurator.py # Demo agent config
+│   │   ├── sprint_reviewer.py         # SprintReviewer wrapper class
+│   │   ├── sprint_reviewer_configurator.py  # SprintReviewer config
 │   │   └── toolkit_configs/
 │   │       ├── gdrive_config.py       # Google Drive OAuth
 │   │       ├── jira_config.py         # Jira API token
@@ -339,10 +343,11 @@ agentllm/
 ├── tests/
 │   ├── test_custom_handler.py         # Provider tests
 │   ├── test_release_manager.py        # ReleaseManager tests
+│   ├── test_sprint_reviewer.py        # SprintReviewer tests
 │   └── test_demo_agent.py             # Demo agent tests
 ├── docs/
 │   ├── agents/
-│   │   └── creating-agents.md         # Complete agent creation guide
+│   │   ├── creating-agents.md         # Complete agent creation guide
 │   └── templates/                     # Documentation templates
 ├── noxfile.py                         # Task automation
 ├── proxy_config.yaml                  # Proxy config (symlink to src/)
@@ -354,6 +359,7 @@ agentllm/
 
 - **[Creating Agents](docs/agents/creating-agents.md)** - Complete guide to building custom agents with tools and configuration
 - **[AGENTS.md](AGENTS.md)** - Architecture patterns, plugin system, and developer guide for contributors
+- **[Release Manager](docs/agents/release_manager.md)** - RHDH release management assistant
 
 ## Troubleshooting
 

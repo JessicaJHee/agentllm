@@ -102,6 +102,8 @@ class JiraTools(Toolkit):
         search_issues: bool = True,
         add_comment: bool = False,
         create_issue: bool = False,
+        extract_sprint_info: bool = True,
+        get_sprint_metrics: bool = True,
         **kwargs,
     ):
         """Initialize Jira toolkit with credentials.
@@ -114,6 +116,8 @@ class JiraTools(Toolkit):
             search_issues: Include search_issues tool (default: True)
             add_comment: Include add_comment tool (default: False)
             create_issue: Include create_issue tool (default: False)
+            extract_sprint_info: Include extract_sprint_info tool (default: True)
+            get_sprint_metrics: Include get_sprint_metrics tool (default: True)
             **kwargs: Additional arguments passed to parent Toolkit
         """
         self._token = token
@@ -131,6 +135,10 @@ class JiraTools(Toolkit):
             tools.append(self.add_comment)
         if create_issue:
             tools.append(self.create_issue)
+        if extract_sprint_info:
+            tools.append(self.extract_sprint_info)
+        if get_sprint_metrics:
+            tools.append(self.get_sprint_metrics)
 
         super().__init__(name="jira_tools", tools=tools, **kwargs)
 
@@ -320,6 +328,12 @@ class JiraTools(Toolkit):
         # Add custom fields section for additional metadata
         custom_fields = {}
         try:
+            # Epic Link (customfield_12311140)
+            epic_link = getattr(issue.fields, "customfield_12311140", None)
+            if epic_link:
+                custom_fields["epic_link"] = epic_link
+                logger.debug(f"Found Epic Link for {issue.key}: {epic_link}")
+
             # Release note text (customfield_12317313)
             release_note_text = getattr(issue.fields, "customfield_12317313", None)
             if release_note_text:
@@ -503,6 +517,12 @@ class JiraTools(Toolkit):
                 try:
                     custom_fields = {}
 
+                    # Check for Epic Link
+                    epic_link = getattr(issue.fields, "customfield_12311140", None)
+                    if epic_link:
+                        custom_fields["epic_link"] = epic_link
+                        logger.debug(f"Found Epic Link in {issue.key}: {epic_link}")
+
                     # Check for PR data
                     pr_data = getattr(issue.fields, "customfield_12310220", None)
                     if pr_data:
@@ -645,5 +665,114 @@ class JiraTools(Toolkit):
 
         except Exception as e:
             error_msg = f"Error creating issue in project {project_key}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def extract_sprint_info(self, issue_key: str) -> str:
+        """Extract sprint ID and name from an issue.
+
+        Args:
+            issue_key: The key of the issue to extract sprint info from
+
+        Returns:
+            JSON string with sprint info {"sprint_id": "123", "sprint_name": "Plugins Sprint 30482"}
+            or None if unable to extract
+        """
+        try:
+            logger.debug(f"Extracting sprint info from issue {issue_key}")
+            jira = self._get_jira_client()
+
+            issue = jira.issue(issue_key)
+            sprint_data = getattr(issue.fields, "customfield_12310940", None)
+
+            if not sprint_data:
+                logger.warning(f"Issue {issue_key} has no sprint data (customfield_12310940)")
+                return json.dumps(None)
+            if not isinstance(sprint_data, list) or len(sprint_data) == 0:
+                logger.warning(f"Issue {issue_key} has invalid sprint data format: {type(sprint_data)}")
+                return json.dumps(None)
+            last_sprint = str(sprint_data[-1])
+
+            sprint_id = None
+            id_match = re.search(r'id=(\d+)', last_sprint)
+            if id_match:
+                sprint_id = id_match.group(1)
+
+            sprint_name = None
+            name_match = re.search(r'name=([^,\]]+)', last_sprint)
+            if name_match:
+                sprint_name = name_match.group(1)
+                logger.debug(f"Extracted sprint_name: {sprint_name}")
+
+            if not sprint_id or not sprint_name:
+                logger.warning(f"Could not extract complete sprint info from {issue_key}: id={sprint_id}, name={sprint_name}")
+                return json.dumps(None)
+
+            result = {
+                "sprint_id": sprint_id,
+                "sprint_name": sprint_name,
+            }
+            logger.info(f"Extracted sprint info from {issue_key}: {sprint_name} (ID: {sprint_id})")
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error extracting sprint info from issue {issue_key}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps(None)
+
+    def get_sprint_metrics(self, sprint_id: str) -> str:
+        """Calculate sprint metrics by running multiple JQL queries.
+
+        This function performs multiple search queries to calculate:
+        - Total planned tickets: Sprint = {sprint_id}
+        - Total closed tickets: Sprint = {sprint_id} AND resolution = done
+        - Closed stories/tasks: Sprint = {sprint_id} AND resolution = done AND type in (Story, Task)
+        - Closed bugs: Sprint = {sprint_id} AND resolution = done AND type = Bug
+
+        Args:
+            sprint_id: The sprint ID to calculate metrics for (e.g., "75290")
+
+        Returns:
+            JSON string with metrics:
+            {
+                "sprint_id": "75290",
+                "total_planned": 25,
+                "total_closed": 18,
+                "stories_tasks_closed": 15,
+                "bugs_closed": 3
+            }
+        """
+        try:
+            logger.debug(f"Calculating sprint metrics for sprint_id={sprint_id}")
+            jira = self._get_jira_client()
+
+            jql_total_planned = f"Sprint = {sprint_id}"
+            jql_total_closed = f"Sprint = {sprint_id} AND resolution = done"
+            jql_stories_tasks_closed = f"Sprint = {sprint_id} AND resolution = done AND type in (Story, Task)"
+            jql_bugs_closed = f"Sprint = {sprint_id} AND resolution = done AND type = Bug"
+
+            total_planned_results = jira.search_issues(jql_total_planned, maxResults=0)
+            total_planned = total_planned_results.total
+
+            total_closed_results = jira.search_issues(jql_total_closed, maxResults=0)
+            total_closed = total_closed_results.total
+
+            stories_tasks_results = jira.search_issues(jql_stories_tasks_closed, maxResults=0)
+            stories_tasks_closed = stories_tasks_results.total
+
+            bugs_results = jira.search_issues(jql_bugs_closed, maxResults=0)
+            bugs_closed = bugs_results.total
+
+            result = {
+                "sprint_id": sprint_id,
+                "total_planned": total_planned,
+                "total_closed": total_closed,
+                "stories_tasks_closed": stories_tasks_closed,
+                "bugs_closed": bugs_closed,
+            }
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error calculating sprint metrics for sprint_id={sprint_id}: {str(e)}"
             logger.error(error_msg)
             return json.dumps({"error": error_msg})

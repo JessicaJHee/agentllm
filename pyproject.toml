@@ -29,6 +29,7 @@ demo-agent = "agentllm.agents.demo_agent:DemoAgentFactory"
 release-manager = "agentllm.agents.release_manager:ReleaseManagerFactory"
 rhai-roadmap-publisher = "agentllm.agents.rhai_roadmap_publisher:RHAIRoadmapPublisherFactory"
 github-pr-prioritization = "agentllm.agents.github_pr_prioritization_agent:GitHubReviewAgentFactory"
+sprint-reviewer = "agentllm.agents.sprint_reviewer:SprintReviewerFactory"
 
 [build-system]
 build-backend = "hatchling.build"
