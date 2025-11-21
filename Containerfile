@@ -30,6 +30,11 @@ COPY custom_handler.py proxy_config.yaml ./
 # The stub custom_handler.py imports from agentllm.custom_handler
 COPY src/agentllm /app/agentllm
 
+# Layer 5: Copy knowledge bases for agents
+# Note: knowledge/ is in .gitignore but needed in container
+COPY examples/knowledge ./examples/
+COPY knowledge/ ./knowledge/
+
 # Create directories for runtime data persistence
 RUN mkdir -p /app/tmp/gdrive_workspace
 

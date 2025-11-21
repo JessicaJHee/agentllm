@@ -73,7 +73,7 @@ class DemoAgentConfigurator(AgentConfigurator):
         Returns:
             dict: Knowledge configuration with knowledge_path and table_name
         """
-        return {"knowledge_path": "examples/knowledge", "table_name": "demo_knowledge"}
+        return {"knowledge_path": "knowledge/demo-agent", "table_name": "demo_knowledge"}
 
     def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:
         """Initialize toolkit configurations for Demo Agent.
