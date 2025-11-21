@@ -34,6 +34,12 @@ model_list:
       description: "GitHub PR Prioritization - Multi-factor scoring and intelligent review queue management"
       mode: chat
 
+  - model_name: agno/sprint-reviewer
+    litellm_params:
+      model: agno/sprint-reviewer
+      custom_llm_provider: agno
+    model_info:
+      description: "Sprint review assistant for creating team sprint reviews with metrics and issue details"
   - model_name: agno/rhdh-support
     litellm_params:
       model: agno/rhdh-support

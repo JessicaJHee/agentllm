@@ -318,6 +318,78 @@ Agent provides scored PR list with detailed breakdown, emoji indicators (🔴 Cr
 - `suggest_next_review(repo, reviewer)` - Smart recommendation with reasoning
 - `get_repo_velocity(repo, days)` - Repository merge velocity metrics (all authors)
 
+### Sprint Reviewer (`agno/sprint-reviewer`)
+
+**Purpose**: AI assistant for generating sprint reviews with JIRA issue tracking and metrics.
+
+**Setup**:
+
+1. **Google Drive OAuth** (for team mapping document access):
+   - Requires `GDRIVE_CLIENT_ID` and `GDRIVE_CLIENT_SECRET` environment variables
+   - Agent will provide OAuth URL on first use
+   - Visit URL, authorize, and paste back the authorization code
+2. **JIRA API Token**:
+   - Go to https://issues.redhat.com
+   - Click profile icon → Account Settings → Security → API Tokens
+   - Create and copy token
+   - In chat: "My Jira token is YOUR_TOKEN_HERE"
+   - Agent validates and stores token securely
+
+**Usage Examples**:
+
+- "Create a sprint review for the RHIDP - Plugins team"
+
+**Workflow**:
+
+The agent follows a structured workflow:
+
+1. **Read team mapping**: Fetches team name to team ID mappings from Google Doc
+2. **Search current sprint**: Queries JIRA for in-progress sprint issues
+3. **Extract sprint info**: Gets sprint ID and name from first issue
+4. **Get sprint metrics**: Retrieves structured metrics (planned, closed, stories/tasks, bugs)
+5. **Search backlog**: Queries top 15 "To Do" issues from backlog
+6. **Generate review**: Creates formatted markdown with metrics and issue lists
+
+**Output Format**:
+
+Generates structured sprint review markdown with:
+
+- **Metrics Section**: Clickable links to sprint board, sprint report, and filtered issue lists
+  - Completed vs planned issues (with breakdown by stories/tasks and bugs)
+  - All metrics linked to JIRA queries with proper URL encoding
+- **This Sprint Section**: Current sprint issues grouped by epic (when 2+ share same epic)
+- **Next Sprint Section**: Top 15 backlog issues in "To Do" state
+- **Acknowledgments Section**: Space for recognizing team contributions
+
+**Epic Grouping Logic**:
+
+- Groups issues when 2+ share the same Epic Link (`customfield_12311140`)
+- Standalone issues listed individually if only 1 in epic
+- Issues ordered by priority within groups: Blocker → Major → Normal → Minor → Undefined
+- Special formatting for plugin update epics
+
+**Key Features**:
+
+- Automatic team ID resolution from Google Doc mapping
+- JIRA metrics calculated via dedicated tool (not manual counting)
+- Smart issue grouping by epic with priority ordering
+- Proper URL encoding for all JIRA links
+- Status indicators for current sprint issues
+- Error handling for missing team names or sprint info
+
+**Implementation Details**:
+
+- Toolkit: `GoogleDriveTools` (for team mapping), `JiraTools` (for issue queries)
+- Configuration: `GoogleDriveConfig`, `JiraConfig`
+- Agent: `SprintReviewer` (`src/agentllm/agents/sprint_reviewer.py`)
+
+**Tools Available**:
+
+- JIRA `search_issues(jql, max_results)` - Search issues with JQL queries
+- JIRA `extract_sprint_info(issue_key)` - Extract sprint ID and name from issue
+- JIRA `get_sprint_metrics(sprint_id)` - Get sprint metrics (number of planned, closed, number of bugs vs tasks and stories)
+- JIRA `get_issue(issue_key)` - Get individual issue details
+
 ## Key Files
 
 ```
