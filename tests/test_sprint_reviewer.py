@@ -93,28 +93,29 @@ class TestSprintReviewerJiraToolkit:
     ):
         """Create a mock JIRA issue for testing."""
         from jira import Issue
-        
+
         mock_issue = MagicMock(spec=Issue)
         mock_issue.key = key
         mock_issue.fields = MagicMock()
-        mock_issue.fields.summary = summary        
+        mock_issue.fields.summary = summary
         mock_issue.fields.status = MagicMock()
         mock_issue.fields.status.name = status
         mock_issue.fields.priority = MagicMock()
         mock_issue.fields.priority.name = priority
         mock_issue.fields.issuetype = MagicMock()
-        mock_issue.fields.issuetype.name = issue_type        
+        mock_issue.fields.issuetype.name = issue_type
         mock_issue.fields.customfield_12311140 = epic_link
         mock_issue.fields.customfield_12310940 = sprint_data
-        
+
         return mock_issue
 
     def test_search_issues_returns_formatted_issues(self, mock_jira_client):
         """Test that search_issues returns properly formatted issues."""
         from agentllm.tools.jira_toolkit import JiraTools
-        
+
         # Wrapper to handle MagicMock serialization
         _dumps = json.dumps
+
         def dumps_wrapper(*args, **kwargs):
             return _dumps(*args, **(kwargs | {"default": lambda obj: "MagicMock"}))
 
@@ -133,21 +134,21 @@ class TestSprintReviewerJiraToolkit:
             priority="Normal",
             issue_type="Task",
         )
-        
+
         mock_jira_client.search_issues.return_value = [mock_issue1, mock_issue2]
-        
+
         with patch("agentllm.tools.jira_toolkit.json.dumps", MagicMock(wraps=dumps_wrapper)):
             toolkit = JiraTools(
                 token="test_token",
                 server_url="https://mock-jira-url.com",
-                search_issues=True,
+                get_issues_detailed=True,
             )
-            result_str = toolkit.search_issues("project = TEST_PROJECT")
+            result_str = toolkit.get_issues_detailed("project = TEST_PROJECT")
             result = json.loads(result_str)
-            
+
             assert isinstance(result, list), "Result should be a list"
             assert len(result) == 2, f"Expected 2 issues, got {len(result)}"
-            
+
             issue1 = result[0]
             assert issue1.get("key") == "PROJ-123"
             assert issue1.get("summary") == "Create frontend plugin for ServiceNow"
@@ -159,14 +160,14 @@ class TestSprintReviewerJiraToolkit:
     def test_get_sprint_metrics_returns_correct_values(self, mock_jira_client):
         """Test that get_sprint_metrics returns correct metric values."""
         from agentllm.tools.jira_toolkit import JiraTools
-        
+
         mock_jira_client.search_issues.side_effect = [
             SimpleNamespace(total=25),  # total_planned query
             SimpleNamespace(total=18),  # total_closed query
             SimpleNamespace(total=15),  # stories_tasks query
-            SimpleNamespace(total=3),   # bugs query
+            SimpleNamespace(total=3),  # bugs query
         ]
-        
+
         toolkit = JiraTools(
             token="test_token",
             server_url="https://mock-jira-url.com",
@@ -175,7 +176,7 @@ class TestSprintReviewerJiraToolkit:
 
         result_str = toolkit.get_sprint_metrics("75290")
         result = json.loads(result_str)
-        
+
         assert result["sprint_id"] == "75290"
         assert result["total_planned"] == 25
         assert result["total_closed"] == 18
@@ -185,28 +186,28 @@ class TestSprintReviewerJiraToolkit:
     def test_extract_sprint_info_returns_sprint_details(self, mock_jira_client):
         """Test that extract_sprint_info returns sprint ID and name."""
         from agentllm.tools.jira_toolkit import JiraTools
-        
+
         # Create mock issue with sprint data using helper
         sprint_data = [
             "com.atlassian.greenhopper.service.sprint.Sprint@1a2b3c[id=11111,name=Sprint Plugins 19329,startDate=2025-08-01T10:00:00.000Z]",
-            "com.atlassian.greenhopper.service.sprint.Sprint@1a2b3c[id=22222,name=Sprint UI 29392,startDate=2025-09-01T13:00:00.000Z]"
+            "com.atlassian.greenhopper.service.sprint.Sprint@1a2b3c[id=22222,name=Sprint UI 29392,startDate=2025-09-01T13:00:00.000Z]",
         ]
         mock_issue = self._create_mock_issue(
             key="PROJ-123",
             summary="Test issue",
             sprint_data=sprint_data,
         )
-        
+
         mock_jira_client.issue.return_value = mock_issue
-        
+
         toolkit = JiraTools(
             token="test_token",
             server_url="https://mock-jira-url.com",
             extract_sprint_info=True,
         )
-        
+
         result_str = toolkit.extract_sprint_info("PROJ-123")
         result = json.loads(result_str)
-        
+
         assert result["sprint_id"] == "22222"
         assert result["sprint_name"] == "Sprint UI 29392"

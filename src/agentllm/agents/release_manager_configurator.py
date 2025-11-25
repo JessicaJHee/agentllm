@@ -71,6 +71,17 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         """
         return "A helpful AI assistant"
 
+    def _get_model_id(self) -> str:
+        """Get model ID for Release Manager.
+
+        For available Gemini models, see:
+        https://ai.google.dev/gemini-api/docs/models/gemini
+
+        Returns:
+            str: Model ID (gemini-2.5-pro for Gemini 2.5)
+        """
+        return "gemini-2.5-pro"
+
     def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:
         """Initialize toolkit configurations for Release Manager.
 
@@ -79,6 +90,17 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         """
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
+
+        # Configure Jira with all tools enabled (default behavior)
+        # To customize tools, pass specific flags:
+        # jira_config = JiraConfig(
+        #     token_storage=self._token_storage,
+        #     get_fix_versions=True,      # For finding release versions
+        #     get_issues_stats=True,       # For statistics/breakdowns
+        #     get_issues_summary=True,     # For listing issues
+        #     get_issues_detailed=False,   # Disable if not needed
+        #     update_issue=True,           # Enable if agent needs to update
+        # )
         jira_config = JiraConfig(token_storage=self._token_storage)
         system_prompt_config = SystemPromptExtensionConfig(
             gdrive_config=gdrive_config,

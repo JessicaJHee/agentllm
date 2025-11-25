@@ -99,7 +99,10 @@ class JiraTools(Toolkit):
         server_url: str,
         username: str | None = None,
         get_issue: bool = True,
-        search_issues: bool = True,
+        get_issues_detailed: bool = True,
+        get_issues_stats: bool = True,
+        get_issues_summary: bool = True,
+        get_fix_versions: bool = True,
         add_comment: bool = False,
         create_issue: bool = False,
         extract_sprint_info: bool = True,
@@ -114,7 +117,10 @@ class JiraTools(Toolkit):
             server_url: Jira server URL
             username: Optional username for basic auth
             get_issue: Include get_issue tool (default: True)
-            search_issues: Include search_issues tool (default: True)
+            get_issues_detailed: Include get_issues_detailed tool (default: True)
+            get_issues_stats: Include get_issues_stats tool (default: True)
+            get_issues_summary: Include get_issues_summary tool (default: True)
+            get_fix_versions: Include get_fix_versions tool (default: True)
             add_comment: Include add_comment tool (default: False)
             create_issue: Include create_issue tool (default: False)
             extract_sprint_info: Include extract_sprint_info tool (default: True)
@@ -131,8 +137,14 @@ class JiraTools(Toolkit):
         tools: list[Any] = []
         if get_issue:
             tools.append(self.get_issue)
-        if search_issues:
-            tools.append(self.search_issues)
+        if get_issues_stats:
+            tools.append(self.get_issues_stats)
+        if get_issues_summary:
+            tools.append(self.get_issues_summary)
+        if get_fix_versions:
+            tools.append(self.get_fix_versions)
+        if get_issues_detailed:
+            tools.append(self.get_issues_detailed)
         if add_comment:
             tools.append(self.add_comment)
         if create_issue:
@@ -447,29 +459,201 @@ class JiraTools(Toolkit):
             logger.error(error_msg)
             return json.dumps({"error": str(e)})
 
-    def search_issues(self, jql_query: str, max_results: int = 50) -> str:
-        """Search for Jira issues using a JQL query.
+    def get_issues_stats(self, jql_query: str) -> str:
+        """Get issue statistics with breakdown by type, status, and priority.
+
+        This is a lightweight tool optimized for statistics - it returns ONLY metadata,
+        no issue details. Use this when you need counts and breakdowns without listing issues.
+
+        Note: Fetches up to 100 issues to calculate accurate breakdowns. For queries with
+        more results, breakdowns are based on a sample. Total count is always accurate.
+
+        Args:
+            jql_query: JQL query string to count issues
+
+        Returns:
+            JSON string containing ONLY summary metadata:
+            - total_count: Total number of matching issues (always accurate)
+            - by_type: Count breakdown by issue type (based on sample if total > 100)
+            - by_status: Count breakdown by status (based on sample if total > 100)
+            - by_priority: Count breakdown by priority (based on sample if total > 100)
+            - query: The JQL query that was executed
+
+        Example response:
+            {
+              "total_count": 33,
+              "by_type": {"Feature": 33},
+              "by_status": {"Backlog": 7, "In Progress": 14, "New": 10, "Refinement": 2},
+              "by_priority": {"Major": 16, "Critical": 8, "Normal": 8, "Blocker": 1},
+              "query": "issuetype = Feature AND fixVersion = \"1.9.0\" AND labels = demo"
+            }
+        """
+        # Fetch up to 100 issues to calculate breakdowns
+        # This is a balance between accuracy and performance
+        result_json = self.get_issues_detailed(
+            jql_query=jql_query,
+            fields="key,type,status,priority",  # Minimal fields needed for breakdowns
+            max_results=100,  # Fetch sample for breakdowns
+            include_summary=True,
+        )
+
+        result = json.loads(result_json)
+
+        # Return ONLY the summary
+        return json.dumps(
+            {
+                "total_count": result["summary"]["total_count"],
+                "by_type": result["summary"]["by_type"],
+                "by_status": result["summary"]["by_status"],
+                "by_priority": result["summary"]["by_priority"],
+                "query": result["query"],
+            },
+            indent=2,
+        )
+
+    def get_fix_versions(self, jql_query: str, max_results: int = 10) -> str:
+        """Get unique fix versions from issues matching a JQL query.
+
+        This is a lightweight tool optimized for extracting fix versions without
+        fetching full issue details. Use this when you need to identify release
+        versions (e.g., "What's the current release?").
+
+        Args:
+            jql_query: JQL query string to search for issues
+            max_results: Maximum number of issues to query (default: 10)
+                        Higher values ensure you capture all unique versions
+
+        Returns:
+            JSON string containing:
+            - fix_versions: List of unique fix version names in descending order
+            - total_issues_queried: Number of issues examined
+            - query: The JQL query that was executed
+
+        Example response:
+            {
+              "fix_versions": ["1.9.0", "1.8.1", "1.8.0"],
+              "total_issues_queried": 10,
+              "query": "project in (RHIDP, RHDHBugs) AND fixVersion in unreleasedVersions() ORDER BY fixVersion DESC"
+            }
+        """
+        try:
+            logger.debug(f"Getting fix versions with JQL: {jql_query}")
+            logger.debug(f"Max results: {max_results}")
+
+            jira = self._get_jira_client()
+
+            # Fetch minimal issue data (just fixVersions field)
+            logger.debug("Executing JQL search for fix versions")
+            issues = jira.search_issues(jql_query, maxResults=max_results, fields="fixVersions")
+
+            logger.debug(f"Found {len(issues)} issues")
+
+            # Extract unique fix versions
+            fix_versions_set = set()
+            for issue in issues:
+                if hasattr(issue.fields, "fixVersions") and issue.fields.fixVersions:
+                    for version in issue.fields.fixVersions:
+                        if hasattr(version, "name"):
+                            fix_versions_set.add(version.name)
+                            logger.debug(f"Found fix version: {version.name} in issue {issue.key}")
+
+            # Sort versions in descending order (newest first)
+            fix_versions_list = sorted(fix_versions_set, reverse=True)
+
+            logger.debug(f"Extracted {len(fix_versions_list)} unique fix versions")
+
+            result = {
+                "fix_versions": fix_versions_list,
+                "total_issues_queried": len(issues),
+                "query": jql_query,
+            }
+
+            return json.dumps(result, indent=2)
+
+        except Exception as e:
+            error_msg = f"Error getting fix versions with JQL '{jql_query}': {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg})
+
+    def get_issues_summary(self, jql_query: str, max_results: int = 50) -> str:
+        """Get Jira issues with minimal fields (key, summary, status).
+
+        This is optimized for listing issues when you don't need full details.
+        Includes summary metadata for context. Use this for "Show me...", "List..." queries.
 
         Args:
             jql_query: JQL query string to search for issues
             max_results: Maximum number of results to return (default: 50)
 
         Returns:
-            JSON string containing list of matching issues
+            JSON string containing:
+            - summary: Metadata (total_count, breakdowns)
+            - issues: List with only key, summary, status fields
+            - query: The JQL query that was executed
+        """
+        return self.get_issues_detailed(
+            jql_query=jql_query,
+            fields="key",  # Only key, summary, status (always included)
+            max_results=max_results,
+            include_summary=True,
+        )
+
+    def get_issues_detailed(
+        self,
+        jql_query: str,
+        fields: str = "key,summary,status,type,assignee,priority,components,labels",
+        max_results: int = 50,
+        include_summary: bool = True,
+    ) -> str:
+        """Get detailed Jira issue information using a JQL query with custom field selection.
+
+        Args:
+            jql_query: JQL query string to search for issues
+            fields: Comma-separated list of fields to return. Available fields:
+                   - key, summary, status, type (always included)
+                   - assignee, priority, components, labels (standard fields)
+                   - created_date, updated_date (timestamps)
+                   - target_version, product_manager, epic_link, pr_data,
+                     release_note_text, release_note_status (custom fields)
+                   Default: "key,summary,status,type,assignee,priority,components,labels"
+            max_results: Maximum number of results to return (default: 50)
+            include_summary: Include summary metadata (total count, breakdown by status/type/priority).
+                           Default: True
+
+        Returns:
+            JSON string containing:
+            - summary: Metadata about the search results (if include_summary=True)
+            - issues: List of matching issues with requested fields
+            - query: The JQL query that was executed
         """
         try:
             logger.debug(f"Starting search with JQL: {jql_query}")
-            logger.debug(f"Max results: {max_results}")
+            logger.debug(f"Max results: {max_results}, fields: {fields}, include_summary: {include_summary}")
+
+            # Parse requested fields
+            requested_fields = [f.strip() for f in fields.split(",")]
+            logger.debug(f"Requested fields: {requested_fields}")
 
             jira = self._get_jira_client()
 
-            # Search with expanded fields for better data
+            # First, get total count with maxResults=0 for accurate summary
+            logger.debug("Getting total count for summary")
+            count_result = jira.search_issues(jql_query, maxResults=0)
+            total_count = count_result.total
+            logger.debug(f"Total issues matching query: {total_count}")
+
+            # Now fetch the actual issues up to max_results
             logger.debug("Executing JQL search with expanded fields")
             issues = jira.search_issues(jql_query, maxResults=max_results, expand="renderedFields,changelog")
 
-            logger.debug(f"Found {len(issues)} issues matching the query")
+            logger.debug(f"Found {len(issues)} issues in current page (total: {total_count})")
 
             results = []
+            # Track issue types for summary
+            issue_type_counts = {}
+            status_counts = {}
+            priority_counts = {}
+
             for issue in issues:
                 if not isinstance(issue, Issue):
                     logger.warning(f"Skipping non-Issue object: {issue}")
@@ -477,88 +661,116 @@ class JiraTools(Toolkit):
 
                 logger.debug(f"Processing issue {issue.key}")
 
+                # Track for summary
+                issue_type = issue.fields.issuetype.name if hasattr(issue.fields, "issuetype") else "Unknown"
+                status = issue.fields.status.name
+                priority = issue.fields.priority.name if issue.fields.priority else "Unknown"
+
+                issue_type_counts[issue_type] = issue_type_counts.get(issue_type, 0) + 1
+                status_counts[status] = status_counts.get(status, 0) + 1
+                priority_counts[priority] = priority_counts.get(priority, 0) + 1
+
+                # Always include key, summary, status
                 issue_details = {
                     "key": issue.key,
                     "summary": issue.fields.summary,
-                    "status": issue.fields.status.name,
-                    "assignee": (issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned"),
-                    "priority": (issue.fields.priority.name if issue.fields.priority else "Unknown"),
-                    "created_date": (str(issue.fields.created) if issue.fields.created else None),
-                    "updated_date": (str(issue.fields.updated) if issue.fields.updated else None),
-                    "components": ([comp.name for comp in issue.fields.components] if issue.fields.components else []),
-                    "labels": list(issue.fields.labels) if issue.fields.labels else [],
+                    "status": status,
                 }
 
-                # Extract target version (customfield_12319940)
-                try:
-                    target_version_data = getattr(issue.fields, "customfield_12319940", None)
-                    if target_version_data:
-                        if isinstance(target_version_data, list):
-                            issue_details["target_version"] = [v.name if hasattr(v, "name") else str(v) for v in target_version_data]
-                            logger.debug(f"Found target version(s) in {issue.key}: {issue_details['target_version']}")
-                        else:
-                            issue_details["target_version"] = [
-                                target_version_data.name if hasattr(target_version_data, "name") else str(target_version_data)
-                            ]
-                            logger.debug(f"Found single target version in {issue.key}: {issue_details['target_version']}")
-                except (AttributeError, Exception) as e:
-                    logger.debug(f"Could not extract target version from {issue.key}: {e}")
+                # Add requested fields
+                if "type" in requested_fields:
+                    issue_details["type"] = issue_type
 
-                # Extract product manager (customfield_12316752)
-                try:
-                    product_manager_data = getattr(issue.fields, "customfield_12316752", None)
-                    if product_manager_data:
-                        if hasattr(product_manager_data, "displayName"):
-                            issue_details["product_manager"] = product_manager_data.displayName
-                            logger.debug(f"Found product manager in {issue.key}: {issue_details['product_manager']}")
-                        elif isinstance(product_manager_data, str):
-                            issue_details["product_manager"] = product_manager_data
-                            logger.debug(f"Found product manager (string) in {issue.key}: {issue_details['product_manager']}")
-                except (AttributeError, Exception) as e:
-                    logger.debug(f"Could not extract product manager from {issue.key}: {e}")
+                if "assignee" in requested_fields:
+                    issue_details["assignee"] = issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned"
 
-                # Add custom fields if they exist
-                try:
-                    custom_fields = {}
+                if "priority" in requested_fields:
+                    issue_details["priority"] = priority
 
-                    # Check for Epic Link
+                if "components" in requested_fields:
+                    issue_details["components"] = [comp.name for comp in issue.fields.components] if issue.fields.components else []
+
+                if "labels" in requested_fields:
+                    issue_details["labels"] = list(issue.fields.labels) if issue.fields.labels else []
+
+                # Timestamp fields
+                if "created_date" in requested_fields:
+                    issue_details["created_date"] = str(issue.fields.created) if issue.fields.created else None
+
+                if "updated_date" in requested_fields:
+                    issue_details["updated_date"] = str(issue.fields.updated) if issue.fields.updated else None
+
+                # Custom fields
+                if "target_version" in requested_fields:
+                    try:
+                        target_version_data = getattr(issue.fields, "customfield_12319940", None)
+                        if target_version_data:
+                            if isinstance(target_version_data, list):
+                                issue_details["target_version"] = [v.name if hasattr(v, "name") else str(v) for v in target_version_data]
+                            else:
+                                issue_details["target_version"] = [
+                                    target_version_data.name if hasattr(target_version_data, "name") else str(target_version_data)
+                                ]
+                    except (AttributeError, Exception) as e:
+                        logger.debug(f"Could not extract target_version from {issue.key}: {e}")
+
+                if "product_manager" in requested_fields:
+                    try:
+                        product_manager_data = getattr(issue.fields, "customfield_12316752", None)
+                        if product_manager_data:
+                            if hasattr(product_manager_data, "displayName"):
+                                issue_details["product_manager"] = product_manager_data.displayName
+                            elif isinstance(product_manager_data, str):
+                                issue_details["product_manager"] = product_manager_data
+                    except (AttributeError, Exception) as e:
+                        logger.debug(f"Could not extract product_manager from {issue.key}: {e}")
+
+                if "epic_link" in requested_fields:
                     epic_link = getattr(issue.fields, "customfield_12311140", None)
                     if epic_link:
-                        custom_fields["epic_link"] = epic_link
-                        logger.debug(f"Found Epic Link in {issue.key}: {epic_link}")
+                        issue_details["epic_link"] = epic_link
 
-                    # Check for PR data
+                if "pr_data" in requested_fields:
                     pr_data = getattr(issue.fields, "customfield_12310220", None)
                     if pr_data:
-                        custom_fields["pr_data"] = pr_data
-                        logger.debug(f"Found PR data in {issue.key}: {pr_data}")
+                        issue_details["pr_data"] = pr_data
 
-                    # Check for release note text
+                if "release_note_text" in requested_fields:
                     release_note_text = getattr(issue.fields, "customfield_12317313", None)
                     if release_note_text:
-                        custom_fields["release_note_text"] = release_note_text
-                        logger.debug(f"Found release note text in {issue.key}")
+                        issue_details["release_note_text"] = release_note_text
 
-                    # Check for release note status
+                if "release_note_status" in requested_fields:
                     release_note_status = getattr(issue.fields, "customfield_12310213", None)
                     if release_note_status:
                         if hasattr(release_note_status, "get"):
                             status_value = release_note_status.get("value")
                         else:
                             status_value = str(release_note_status)
-                        custom_fields["release_note_status"] = status_value
-                        logger.debug(f"Found release note status in {issue.key}: {status_value}")
-
-                    if custom_fields:
-                        issue_details["custom_fields"] = custom_fields
-
-                except (AttributeError, Exception) as e:
-                    logger.debug(f"Could not extract custom fields from {issue.key}: {e}")
+                        issue_details["release_note_status"] = status_value
 
                 results.append(issue_details)
 
             logger.debug(f"Successfully processed {len(results)} issues for JQL '{jql_query}'")
-            return json.dumps(results, indent=2)
+
+            # Build response with summary
+            response = {
+                "query": jql_query,
+                "issues": results,
+            }
+
+            if include_summary:
+                response["summary"] = {
+                    "total_count": total_count,
+                    "returned_count": len(results),
+                    "max_results": max_results,
+                    "has_more": total_count > len(results),
+                    "by_type": issue_type_counts,
+                    "by_status": status_counts,
+                    "by_priority": priority_counts,
+                }
+
+            return json.dumps(response, indent=2)
 
         except Exception as e:
             error_msg = f"Error searching issues with JQL '{jql_query}': {str(e)}"
@@ -698,12 +910,12 @@ class JiraTools(Toolkit):
             last_sprint = str(sprint_data[-1])
 
             sprint_id = None
-            id_match = re.search(r'id=(\d+)', last_sprint)
+            id_match = re.search(r"id=(\d+)", last_sprint)
             if id_match:
                 sprint_id = id_match.group(1)
 
             sprint_name = None
-            name_match = re.search(r'name=([^,\]]+)', last_sprint)
+            name_match = re.search(r"name=([^,\]]+)", last_sprint)
             if name_match:
                 sprint_name = name_match.group(1)
                 logger.debug(f"Extracted sprint_name: {sprint_name}")
@@ -780,6 +992,7 @@ class JiraTools(Toolkit):
             error_msg = f"Error calculating sprint metrics for sprint_id={sprint_id}: {str(e)}"
             logger.error(error_msg)
             return json.dumps({"error": error_msg})
+
     def update_issue(
         self,
         *,  # Force all parameters to be keyword-only
@@ -854,15 +1067,12 @@ class JiraTools(Toolkit):
 
             # Labels
             if labels is not None:
-                label_list = [l.strip() for l in labels.split(",") if l.strip()]
+                label_list = [label.strip() for label in labels.split(",") if label.strip()]
                 fields["labels"] = label_list
                 logger.debug(f"Setting labels to: {label_list}")
 
             if not fields:
-                return json.dumps({
-                    "status": "skipped",
-                    "message": "No fields provided to update"
-                })
+                return json.dumps({"status": "skipped", "message": "No fields provided to update"})
 
             logger.debug(f"Update fields: {fields}")
 
@@ -874,13 +1084,15 @@ class JiraTools(Toolkit):
             issue_url = f"{self._server_url}/browse/{issue_key}"
             logger.info(f"Successfully updated issue {issue_key}")
 
-            return json.dumps({
-                "key": issue_key,
-                "url": issue_url,
-                "status": "success",
-                "message": f"Issue {issue_key} updated successfully",
-                "updated_fields": list(fields.keys())
-            })
+            return json.dumps(
+                {
+                    "key": issue_key,
+                    "url": issue_url,
+                    "status": "success",
+                    "message": f"Issue {issue_key} updated successfully",
+                    "updated_fields": list(fields.keys()),
+                }
+            )
 
         except Exception as e:
             error_msg = f"Error updating issue {issue_key}: {str(e)}"

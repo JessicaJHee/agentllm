@@ -31,11 +31,11 @@ from pathlib import Path
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
-from google.oauth2.credentials import Credentials
+from google.oauth2.credentials import Credentials  # noqa: E402
 
-from agentllm.db import TokenStorage
-from agentllm.tools.gdrive_toolkit import GoogleDriveTools
-from agentllm.tools.jira_toolkit import JiraTools
+from agentllm.db import TokenStorage  # noqa: E402
+from agentllm.tools.gdrive_toolkit import GoogleDriveTools  # noqa: E402
+from agentllm.tools.jira_toolkit import JiraTools  # noqa: E402
 
 
 def example_jira_token_storage():
@@ -66,7 +66,7 @@ def example_jira_token_storage():
         server_url=jira_token_data["server_url"],
         username=jira_token_data.get("username"),
         get_issue=True,
-        search_issues=True,
+        get_issues_detailed=True,
     )
 
     # Use the toolkit

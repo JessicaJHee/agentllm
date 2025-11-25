@@ -22,15 +22,54 @@ class JiraConfig(BaseToolkitConfig):
         The token is validated by connecting to the Jira server.
     """
 
-    def __init__(self, jira_server: str = "https://issues.redhat.com", token_storage=None):
+    def __init__(
+        self,
+        jira_server: str = "https://issues.redhat.com",
+        token_storage=None,
+        # Tool enablement flags (defaults: all read tools enabled, write tools disabled)
+        get_issue: bool = True,
+        get_issues_detailed: bool = True,
+        get_issues_stats: bool = True,
+        get_issues_summary: bool = True,
+        get_fix_versions: bool = True,
+        add_comment: bool = False,
+        create_issue: bool = False,
+        extract_sprint_info: bool = True,
+        get_sprint_metrics: bool = True,
+        update_issue: bool = False,
+    ):
         """Initialize JIRA configuration.
 
         Args:
             jira_server: JIRA server URL
             token_storage: TokenStorage instance for database-backed credentials
+            get_issue: Enable get_issue tool (default: True)
+            get_issues_detailed: Enable get_issues_detailed tool (default: True)
+            get_issues_stats: Enable get_issues_stats tool (default: True)
+            get_issues_summary: Enable get_issues_summary tool (default: True)
+            get_fix_versions: Enable get_fix_versions tool (default: True)
+            add_comment: Enable add_comment tool (default: False)
+            create_issue: Enable create_issue tool (default: False)
+            extract_sprint_info: Enable extract_sprint_info tool (default: True)
+            get_sprint_metrics: Enable get_sprint_metrics tool (default: True)
+            update_issue: Enable update_issue tool (default: False)
         """
         super().__init__(token_storage)
         self._jira_server = jira_server
+
+        # Store tool configuration
+        self._tool_config = {
+            "get_issue": get_issue,
+            "get_issues_detailed": get_issues_detailed,
+            "get_issues_stats": get_issues_stats,
+            "get_issues_summary": get_issues_summary,
+            "get_fix_versions": get_fix_versions,
+            "add_comment": add_comment,
+            "create_issue": create_issue,
+            "extract_sprint_info": extract_sprint_info,
+            "get_sprint_metrics": get_sprint_metrics,
+            "update_issue": update_issue,
+        }
 
         # Store per-user JIRA toolkits (in-memory cache)
         self._jira_toolkits: dict[str, JiraTools] = {}
@@ -86,17 +125,11 @@ class JiraConfig(BaseToolkitConfig):
         logger.info(f"Validating Jira token for user {user_id}")
 
         try:
-            # Create toolkit with the token
+            # Create toolkit with the token using configured tool settings
             toolkit = JiraTools(
                 token=token,
                 server_url=self._jira_server,
-                get_issue=True,
-                search_issues=True,
-                add_comment=False,
-                create_issue=False,
-                extract_sprint_info=True,
-                get_sprint_metrics=True,
-                update_issue=True,
+                **self._tool_config,
             )
 
             # Validate the connection
@@ -190,13 +223,7 @@ class JiraConfig(BaseToolkitConfig):
                     token=token_data["token"],
                     server_url=token_data["server_url"],
                     username=token_data.get("username"),
-                    get_issue=True,
-                    search_issues=True,
-                    add_comment=False,
-                    create_issue=False,
-                    extract_sprint_info=True,
-                    get_sprint_metrics=True,
-                    update_issue=True,
+                    **self._tool_config,
                 )
                 logger.info(f"Recreated JIRA toolkit from database for user {user_id}")
             except Exception as e:
@@ -209,13 +236,7 @@ class JiraConfig(BaseToolkitConfig):
                 toolkit = JiraTools(
                     token=token,
                     server_url=self._jira_server,
-                    get_issue=True,
-                    search_issues=True,
-                    add_comment=False,
-                    create_issue=False,
-                    extract_sprint_info=True,
-                    get_sprint_metrics=True,
-                    update_issue=True,
+                    **self._tool_config,
                 )
                 logger.info(f"Recreated JIRA toolkit (legacy) for user {user_id}")
 

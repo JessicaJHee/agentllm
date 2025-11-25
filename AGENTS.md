@@ -14,7 +14,9 @@ Architecture: `[Client] -> [LiteLLM Proxy :8890] -> [Agno Provider] -> [Agno Age
 # Testing
 nox -s test                                    # Unit tests
 nox -s integration                             # Integration tests (needs running proxy)
-uv run pytest tests/test_custom_handler.py -v  # Specific test
+uv run pytest tests/test_custom_handler.py -v  # Specific test (-v auto-enables AGNO_DEBUG)
+pytest tests/ -v -s                            # Verbose + show output (AGNO_DEBUG=true)
+pytest tests/                                  # Quiet mode (AGNO_DEBUG not set)
 
 # Development (most common)
 nox -s proxy                                   # Terminal 1: local proxy with hot reload
@@ -105,6 +107,37 @@ Key methods:
 - `get_toolkit(user_id)` - Return configured toolkit instance
 - `is_required()` - Required toolkits prompt immediately, optional toolkits only when mentioned
 - `check_authorization_request(message, user_id)` - Detect optional toolkit requests
+
+#### Customizing Jira Tools Per Agent
+
+`JiraConfig` allows each agent to specify which Jira tools to enable:
+
+```python
+# Default: all read tools enabled, write tools disabled
+jira_config = JiraConfig(token_storage=self._token_storage)
+
+# Custom: only enable specific tools your agent needs
+jira_config = JiraConfig(
+    token_storage=self._token_storage,
+    get_fix_versions=True,       # For finding release versions
+    get_issues_stats=True,        # For statistics/breakdowns
+    get_issues_summary=True,      # For listing issues
+    get_issues_detailed=False,    # Disable if not needed
+    update_issue=True,            # Enable if agent needs to update issues
+)
+```
+
+**Available Jira Tools:**
+- `get_issue` - Get single issue with full details
+- `get_issues_detailed` - Get issues with custom fields
+- `get_issues_stats` - Get statistics breakdown (type/status/priority)
+- `get_issues_summary` - Get basic issue list (key/summary/status)
+- `get_fix_versions` - Get unique fix version names
+- `add_comment` - Add comments to issues (write)
+- `create_issue` - Create new issues (write)
+- `extract_sprint_info` - Extract sprint ID/name from issue
+- `get_sprint_metrics` - Get sprint metrics
+- `update_issue` - Update issue fields (write)
 
 ### Streaming Format (CRITICAL!)
 
@@ -385,7 +418,8 @@ Generates structured sprint review markdown with:
 
 **Tools Available**:
 
-- JIRA `search_issues(jql, max_results)` - Search issues with JQL queries
+- JIRA `get_issues_detailed(jql, fields, max_results)` - Get detailed issue information with custom fields
+- JIRA `get_issues_summary(jql, max_results)` - Get basic issue list (key, summary, status)
 - JIRA `extract_sprint_info(issue_key)` - Extract sprint ID and name from issue
 - JIRA `get_sprint_metrics(sprint_id)` - Get sprint metrics (number of planned, closed, number of bugs vs tasks and stories)
 - JIRA `get_issue(issue_key)` - Get individual issue details
@@ -429,3 +463,32 @@ See `.env.secrets.template` for full config.
 4. Refactor
 
 Always use `uv run` for Python commands.
+
+### Debugging Tests
+
+**Automatic AGNO_DEBUG**: Tests automatically enable `AGNO_DEBUG=true` when run with `-v` (verbose mode):
+
+```bash
+# Verbose mode - AGNO_DEBUG automatically enabled
+pytest tests/test_release_manager.py -v
+
+# Extra verbose with output capture disabled
+pytest tests/test_release_manager.py -v -s
+
+# Quiet mode - AGNO_DEBUG not set
+pytest tests/test_release_manager.py
+```
+
+This is configured in `tests/conftest.py` via the `pytest_configure()` hook. When verbose mode is detected, it automatically sets:
+- `AGNO_DEBUG=true` - Enables detailed Agno agent logging
+- `AGNO_SHOW_TOOL_CALLS=true` - Shows tool call details
+
+You can override these by explicitly setting them in your environment:
+
+```bash
+# Force AGNO_DEBUG even in quiet mode
+AGNO_DEBUG=true pytest tests/
+
+# Disable AGNO_DEBUG even in verbose mode
+AGNO_DEBUG=false pytest tests/ -v
+```
