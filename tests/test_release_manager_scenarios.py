@@ -350,6 +350,7 @@ class TestReleaseManagerScenarios:
                         if reported_count is None:
                             validation_messages.append("⚠️  Could not extract count from agent response")
                             print("  Could not extract count from response")
+                            raise AssertionError("Failed to extract count from agent response for count accuracy validation")
                         else:
                             print(f"  Agent reported count: {reported_count}")
 

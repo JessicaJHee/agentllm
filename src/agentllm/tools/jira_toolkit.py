@@ -465,15 +465,18 @@ class JiraTools(Toolkit):
         This is a lightweight tool optimized for statistics - it returns ONLY metadata,
         no issue details. Use this when you need counts and breakdowns without listing issues.
 
+        Note: Fetches up to 100 issues to calculate accurate breakdowns. For queries with
+        more results, breakdowns are based on a sample. Total count is always accurate.
+
         Args:
             jql_query: JQL query string to count issues
 
         Returns:
             JSON string containing ONLY summary metadata:
-            - total_count: Total number of matching issues
-            - by_type: Count breakdown by issue type (Feature, Bug, Task, etc.)
-            - by_status: Count breakdown by status (Backlog, In Progress, Done, etc.)
-            - by_priority: Count breakdown by priority (Blocker, Critical, Major, etc.)
+            - total_count: Total number of matching issues (always accurate)
+            - by_type: Count breakdown by issue type (based on sample if total > 100)
+            - by_status: Count breakdown by status (based on sample if total > 100)
+            - by_priority: Count breakdown by priority (based on sample if total > 100)
             - query: The JQL query that was executed
 
         Example response:
@@ -485,11 +488,12 @@ class JiraTools(Toolkit):
               "query": "issuetype = Feature AND fixVersion = \"1.9.0\" AND labels = demo"
             }
         """
-        # Delegate to get_issues_detailed with minimal fields and no issues returned
+        # Fetch up to 100 issues to calculate breakdowns
+        # This is a balance between accuracy and performance
         result_json = self.get_issues_detailed(
             jql_query=jql_query,
-            fields="key",  # Minimal field to reduce processing
-            max_results=0,  # Don't return any issues
+            fields="key,type,status,priority",  # Minimal fields needed for breakdowns
+            max_results=100,  # Fetch sample for breakdowns
             include_summary=True,
         )
 
