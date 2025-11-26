@@ -90,3 +90,24 @@ class TokenRegistry:
             List of token type identifiers
         """
         return list(self._registry.keys())
+
+
+# Global token registry that agent configs can register with
+_global_registry = TokenRegistry()
+
+
+def get_global_registry() -> TokenRegistry:
+    """Get the global token registry.
+
+    This registry is populated by agent toolkit configs when they are imported.
+    Each toolkit config registers its token model and encryption configuration.
+
+    Returns:
+        The global TokenRegistry instance
+
+    Example:
+        >>> from agentllm.db.token_registry import get_global_registry
+        >>> registry = get_global_registry()
+        >>> print(registry.list_types())  # ['jira', 'github', 'gdrive', 'rhcp']
+    """
+    return _global_registry

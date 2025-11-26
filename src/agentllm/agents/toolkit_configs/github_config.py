@@ -1,10 +1,42 @@
 """GitHub configuration manager."""
 
 import re
+from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import declarative_base
+
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 
 from .base import BaseToolkitConfig
+
+# Define token model for GitHub
+Base = declarative_base()
+
+
+class GitHubToken(Base):
+    """Table for storing GitHub API tokens."""
+
+    __tablename__ = "github_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    token = Column(String, nullable=False)
+    server_url = Column(String, nullable=False, default="https://api.github.com")
+    username = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Register GitHub token type with global registry
+get_global_registry().register(
+    "github",
+    TokenTypeConfig(
+        model=GitHubToken,
+        encrypted_fields=["token"],
+    ),
+)
 
 
 class GitHubConfig(BaseToolkitConfig):

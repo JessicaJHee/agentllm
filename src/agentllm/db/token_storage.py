@@ -1,7 +1,9 @@
 """Token storage for OAuth credentials and API tokens.
 
-This module provides SQLite-based storage for Jira and Google Drive tokens,
-allowing per-user credential management.
+This module provides SQLite-based storage for agent tokens with encryption.
+
+TokenStorage is now fully agnostic of token types - all token models are defined
+in their respective agent toolkit configs and registered with the global registry.
 
 All sensitive tokens are encrypted at rest using Fernet symmetric encryption.
 """
@@ -11,83 +13,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Engine,
-    Integer,
-    String,
-    Text,
-    create_engine,
-    text,
-)
+from sqlalchemy import Column, DateTime, Engine, Integer, String, create_engine, text
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 
 from agentllm.db.encryption import DecryptionError, TokenEncryption
-from agentllm.db.token_registry import TokenRegistry, TokenTypeConfig
+from agentllm.db.token_registry import TokenRegistry, get_global_registry
 
 if TYPE_CHECKING:
     from agno.db.sqlite import SqliteDb
 
+# Base for demo-specific tables (not managed by registry)
 Base = declarative_base()
-
-
-class JiraToken(Base):
-    """Table for storing Jira API tokens."""
-
-    __tablename__ = "jira_tokens"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, nullable=False, unique=True, index=True)
-    token = Column(String, nullable=False)
-    server_url = Column(String, nullable=False)
-    username = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class GoogleDriveToken(Base):
-    """Table for storing Google Drive OAuth tokens."""
-
-    __tablename__ = "gdrive_tokens"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, nullable=False, unique=True, index=True)
-    token = Column(String, nullable=False)
-    refresh_token = Column(String, nullable=True)
-    token_uri = Column(String, nullable=True)
-    client_id = Column(String, nullable=True)
-    client_secret = Column(String, nullable=True)
-    scopes = Column(Text, nullable=True)  # JSON array of scopes
-    expiry = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class GitHubToken(Base):
-    """Table for storing GitHub API tokens."""
-
-    __tablename__ = "github_tokens"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, nullable=False, unique=True, index=True)
-    token = Column(String, nullable=False)
-    server_url = Column(String, nullable=False, default="https://api.github.com")
-    username = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class RHCPToken(Base):
-    """Table for storing Red Hat Customer Portal offline tokens."""
-
-    __tablename__ = "rhcp_tokens"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, nullable=False, unique=True, index=True)
-    offline_token = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class FavoriteColor(Base):
@@ -112,6 +48,7 @@ class TokenStorage:
         db_engine: Engine | None = None,
         agno_db: "SqliteDb | None" = None,
         encryption_key: str | None = None,
+        registry: TokenRegistry | None = None,
     ):
         """Initialize token storage with database connection and encryption.
 
@@ -121,11 +58,16 @@ class TokenStorage:
             db_engine: Pre-configured SQLAlchemy engine
             agno_db: Agno SqliteDb instance to reuse its engine (recommended)
             encryption_key: Fernet encryption key (loads from AGENTLLM_TOKEN_ENCRYPTION_KEY if None)
+            registry: TokenRegistry instance (uses global registry if None)
 
         Priority: agno_db > db_engine > db_url > db_file > default (./tokens.db)
 
         Raises:
             EncryptionKeyMissingError: If encryption key is not provided or found in environment
+
+        Note:
+            Token models are registered by agent toolkit configs when they are imported.
+            The global registry is populated automatically on import.
         """
         # Determine database engine
         if agno_db is not None:
@@ -153,9 +95,9 @@ class TokenStorage:
         self._encryption = TokenEncryption(encryption_key)
         logger.info("TokenStorage initialized with encryption enabled")
 
-        # Initialize token type registry
-        self._registry = self._initialize_registry()
-        logger.debug(f"Registered {len(self._registry.list_types())} token types")
+        # Use provided registry or global registry
+        self._registry = registry or get_global_registry()
+        logger.debug(f"Using token registry with {len(self._registry.list_types())} registered types: {self._registry.list_types()}")
 
         # Create tables
         self._create_tables()
@@ -172,7 +114,19 @@ class TokenStorage:
         return str(self.db_engine.url)
 
     def _create_tables(self):
-        """Create database tables if they don't exist."""
+        """Create database tables if they don't exist.
+
+        Creates tables for:
+        1. All token types registered in the registry (from agent configs)
+        2. Demo-specific tables (FavoriteColor)
+        """
+        # Create tables for registered token types
+        for token_type in self._registry.list_types():
+            config = self._registry.get(token_type)
+            config.model.metadata.create_all(self.db_engine)
+            logger.debug(f"Created/verified table for token type: {token_type}")
+
+        # Create demo-specific tables
         Base.metadata.create_all(self.db_engine)
         logger.debug("Token storage tables created/verified")
 
@@ -230,62 +184,6 @@ class TokenStorage:
         except Exception as e:
             logger.error(f"Token decryption failed: {e}")
             raise
-
-    # Token Type Registry
-
-    def _initialize_registry(self) -> TokenRegistry:
-        """Initialize token type registry with all known token types.
-
-        Returns:
-            Configured TokenRegistry instance
-        """
-        registry = TokenRegistry()
-
-        # Register Jira tokens
-        registry.register(
-            "jira",
-            TokenTypeConfig(
-                model=JiraToken,
-                encrypted_fields=["token"],
-            ),
-        )
-
-        # Register GitHub tokens
-        registry.register(
-            "github",
-            TokenTypeConfig(
-                model=GitHubToken,
-                encrypted_fields=["token"],
-            ),
-        )
-
-        # Register Google Drive tokens
-        # Import serializers from gdrive_config (late import to avoid circular dependency)
-        from agentllm.agents.toolkit_configs.gdrive_config import (
-            deserialize_gdrive_credentials,
-            serialize_gdrive_credentials,
-        )
-
-        registry.register(
-            "gdrive",
-            TokenTypeConfig(
-                model=GoogleDriveToken,
-                encrypted_fields=["token", "refresh_token", "client_secret"],
-                serializer=serialize_gdrive_credentials,
-                deserializer=deserialize_gdrive_credentials,
-            ),
-        )
-
-        # Register RHCP tokens
-        registry.register(
-            "rhcp",
-            TokenTypeConfig(
-                model=RHCPToken,
-                encrypted_fields=["offline_token"],
-            ),
-        )
-
-        return registry
 
     # Generic Token Operations
 

@@ -26,6 +26,15 @@ def pytest_configure(config):
         test_key = Fernet.generate_key().decode()
         os.environ["AGENTLLM_TOKEN_ENCRYPTION_KEY"] = test_key
 
+    # Import agent configs to trigger token type registration
+    # This populates the global registry with token models
+    # fmt: off
+    import agentllm.agents.toolkit_configs.gdrive_config  # noqa: E402, F401
+    import agentllm.agents.toolkit_configs.github_config  # noqa: E402, F401
+    import agentllm.agents.toolkit_configs.jira_config  # noqa: E402, F401
+    import agentllm.agents.toolkit_configs.rhcp_config  # noqa: E402, F401
+    # fmt: on
+
     # Check if verbose mode is enabled (-v or -vv)
     verbose = config.getoption("verbose", 0)
 

@@ -5,12 +5,41 @@ The toolkit does not support creating, updating, or modifying customer cases.
 """
 
 import re
+from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import declarative_base
 
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 from agentllm.tools.rhcp_toolkit import RHCPTools
 
 from .base import BaseToolkitConfig
+
+# Define token model for RHCP
+Base = declarative_base()
+
+
+class RHCPToken(Base):
+    """Table for storing Red Hat Customer Portal offline tokens."""
+
+    __tablename__ = "rhcp_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    offline_token = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Register RHCP token type with global registry
+get_global_registry().register(
+    "rhcp",
+    TokenTypeConfig(
+        model=RHCPToken,
+        encrypted_fields=["offline_token"],
+    ),
+)
 
 
 class RHCPConfig(BaseToolkitConfig):

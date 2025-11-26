@@ -3,6 +3,7 @@
 import json
 import os
 import re
+from datetime import datetime
 from typing import Any
 
 from google.auth.transport.requests import Request
@@ -10,10 +11,34 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import declarative_base
 
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 from agentllm.tools.gdrive_toolkit import GoogleDriveTools
 
 from .base import BaseToolkitConfig
+
+# Define token model for Google Drive
+Base = declarative_base()
+
+
+class GoogleDriveToken(Base):
+    """Table for storing Google Drive OAuth tokens."""
+
+    __tablename__ = "gdrive_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    token = Column(String, nullable=False)
+    refresh_token = Column(String, nullable=True)
+    token_uri = Column(String, nullable=True)
+    client_id = Column(String, nullable=True)
+    client_secret = Column(String, nullable=True)
+    scopes = Column(Text, nullable=True)  # JSON array of scopes
+    expiry = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def serialize_gdrive_credentials(credentials: Credentials) -> dict[str, Any]:
@@ -58,6 +83,18 @@ def deserialize_gdrive_credentials(data: dict[str, Any]) -> Credentials:
         credentials.expiry = data["expiry"]
 
     return credentials
+
+
+# Register Google Drive token type with global registry
+get_global_registry().register(
+    "gdrive",
+    TokenTypeConfig(
+        model=GoogleDriveToken,
+        encrypted_fields=["token", "refresh_token", "client_secret"],
+        serializer=serialize_gdrive_credentials,
+        deserializer=deserialize_gdrive_credentials,
+    ),
+)
 
 
 class GoogleDriveConfig(BaseToolkitConfig):

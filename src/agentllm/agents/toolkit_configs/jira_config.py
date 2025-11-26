@@ -1,12 +1,43 @@
 """JIRA configuration manager."""
 
 import re
+from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import declarative_base
 
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 from agentllm.tools.jira_toolkit import JiraTools
 
 from .base import BaseToolkitConfig
+
+# Define token model for JIRA
+Base = declarative_base()
+
+
+class JiraToken(Base):
+    """Table for storing Jira API tokens."""
+
+    __tablename__ = "jira_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    token = Column(String, nullable=False)
+    server_url = Column(String, nullable=False)
+    username = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Register JIRA token type with global registry
+get_global_registry().register(
+    "jira",
+    TokenTypeConfig(
+        model=JiraToken,
+        encrypted_fields=["token"],
+    ),
+)
 
 
 class JiraConfig(BaseToolkitConfig):
