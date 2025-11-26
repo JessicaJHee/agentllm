@@ -29,11 +29,14 @@ class StateTokenInvalidError(StateTokenError):
     pass
 
 
-# Get secret key from environment or generate a random one (NOT recommended for production)
+# Get secret key from environment - REQUIRED for OAuth callback server
 _STATE_SECRET_KEY = os.environ.get("AGENTLLM_OAUTH_STATE_SECRET")
 if not _STATE_SECRET_KEY:
-    logger.warning("AGENTLLM_OAUTH_STATE_SECRET not set - using insecure fallback. Set this environment variable in production!")
-    _STATE_SECRET_KEY = os.urandom(32).hex()
+    raise ValueError(
+        "AGENTLLM_OAUTH_STATE_SECRET environment variable is required for OAuth callback server. "
+        'Generate a secure secret with: python -c "import secrets; print(secrets.token_hex(32))" '
+        "and add it to your .env.secrets file. See .env.secrets.template for details."
+    )
 
 # State token expiration time (10 minutes)
 _STATE_TOKEN_EXPIRY_MINUTES = 10

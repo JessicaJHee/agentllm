@@ -119,7 +119,7 @@ class GoogleDriveProvider(OAuthProvider):
             )
 
             # Exchange code for token (with timeout to prevent DoS)
-            # Note: Flow.fetch_token internally uses requests with timeout
+            # The timeout parameter is passed to the underlying HTTP request
             flow.fetch_token(code=code, timeout=10)
 
             # Get credentials

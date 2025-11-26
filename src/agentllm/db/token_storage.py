@@ -287,7 +287,11 @@ class TokenStorage:
                         try:
                             token_data[field_name] = self._decrypt_token(token_data[field_name])
                         except DecryptionError as e:
-                            logger.error(f"Failed to decrypt {token_type} {field_name} for user {user_id}: {e}")
+                            logger.critical(
+                                f"Decryption failure for {token_type} {field_name} (user {user_id}): {e}. "
+                                "This may indicate wrong encryption key or tampered data."
+                            )
+                            # TODO: Expose decryption failures as a metric for monitoring
                             return None
 
                 # Apply deserializer if configured (e.g., for Google Credentials)

@@ -26,6 +26,11 @@ def pytest_configure(config):
         test_key = Fernet.generate_key().decode()
         os.environ["AGENTLLM_TOKEN_ENCRYPTION_KEY"] = test_key
 
+    # Set up OAuth state secret for tests if not already set
+    if "AGENTLLM_OAUTH_STATE_SECRET" not in os.environ:
+        # Use a consistent test secret (not random) for predictable test behavior
+        os.environ["AGENTLLM_OAUTH_STATE_SECRET"] = "test_oauth_state_secret_12345678901234567890123456789012"
+
     # Discover and register all toolkit token types
     # This imports all toolkit configs which auto-register their token models
     from agentllm.agents.toolkit_configs import discover_and_register_toolkits  # noqa: E402

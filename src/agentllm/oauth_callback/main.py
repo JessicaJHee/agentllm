@@ -8,7 +8,7 @@ sharing the SQLite database at /app/tmp/agent-data/agno_sessions.db.
 """
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 
 from agno.db.sqlite import SqliteDb
 from fastapi import FastAPI, Query, Request
@@ -209,7 +209,7 @@ async def oauth_callback(
                     <p style="color: #6c757d; font-size: 14px; margin-top: 40px;">
                         User ID: <code>{user_id}</code><br>
                         Provider: <code>{provider}</code><br>
-                        Authenticated at: {datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")}
+                        Authenticated at: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")}
                     </p>
                     <hr style="margin: 40px auto; width: 200px; border: 1px solid #dee2e6;">
                     <p style="color: #6c757d; font-size: 12px;">

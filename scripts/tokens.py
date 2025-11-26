@@ -25,6 +25,18 @@ repo_root = Path(__file__).parent.parent
 env_secrets = repo_root / ".env.secrets"
 if env_secrets.exists():
     load_dotenv(env_secrets)
+else:
+    click.echo(
+        click.style("⚠️  Warning: .env.secrets not found", fg="yellow", bold=True),
+        err=True,
+    )
+    click.echo(
+        "\nThis script requires AGENTLLM_TOKEN_ENCRYPTION_KEY to be set.\n"
+        "Either:\n"
+        "  1. Create .env.secrets from .env.secrets.template, or\n"
+        "  2. Set AGENTLLM_TOKEN_ENCRYPTION_KEY in your environment\n",
+        err=True,
+    )
 
 # Add src to path so we can import agentllm
 sys.path.insert(0, str(repo_root / "src"))
