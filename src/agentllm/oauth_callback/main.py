@@ -89,7 +89,7 @@ async def oauth_callback(
     request: Request,
     provider: str,
     code: str = Query(..., description="OAuth authorization code"),
-    state: str = Query(..., description="State parameter (user_id)"),
+    state: str = Query(..., description="State parameter (signed JWT token)"),
 ):
     """Generic OAuth callback endpoint for all providers.
 
@@ -97,15 +97,38 @@ async def oauth_callback(
         request: FastAPI request object
         provider: Provider name (google, github, etc.)
         code: OAuth authorization code
-        state: State parameter containing user_id
+        state: Signed JWT state token containing user_id (for CSRF protection)
 
     Returns:
         HTML response with success or error message
     """
-    user_id = state
+    # Validate state token early for logging and display purposes
+    # Provider will validate it again for security
+    from agentllm.oauth_callback.state_validation import StateTokenError, validate_state_token
 
-    logger.info(f"🔔 OAuth callback received for provider={provider}, user_id={user_id}")
-    logger.debug(f"Full callback URL: {request.url}")
+    try:
+        user_id = validate_state_token(state)
+        logger.info(f"🔔 OAuth callback received for provider={provider}, user_id={user_id}")
+        logger.debug(f"Full callback URL: {request.url}")
+    except StateTokenError as e:
+        logger.error(f"Invalid state token in OAuth callback: {e}")
+        return HTMLResponse(
+            content="""
+            <html>
+                <head><title>OAuth Error</title></head>
+                <body style="font-family: Arial, sans-serif; padding: 50px; text-align: center;">
+                    <h1 style="color: #dc3545;">❌ Authorization Failed</h1>
+                    <p style="font-size: 18px; margin-top: 20px;">
+                        Invalid or expired authorization request.
+                    </p>
+                    <p style="color: #6c757d; margin-top: 20px;">
+                        Please restart the authorization process.
+                    </p>
+                </body>
+            </html>
+            """,
+            status_code=400,
+        )
 
     # Get provider from registry
     oauth_provider = provider_registry.get_provider(provider)

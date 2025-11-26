@@ -71,12 +71,7 @@ class TestJiraTriagerBasics:
         assert agent is not None
 
         # Test configurator separately
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         assert len(configurator.toolkit_configs) > 0
 
     def test_create_agent_with_params(self, shared_db: SqliteDb, token_storage: TokenStorageType):
@@ -86,24 +81,14 @@ class TestJiraTriagerBasics:
 
         # Test configurator parameters separately
         configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage,
-            temperature=0.7,
-            max_tokens=200
+            user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage, temperature=0.7, max_tokens=200
         )
         assert configurator._temperature == 0.7
         assert configurator._max_tokens == 200
 
     def test_toolkit_configs_initialized(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that toolkit configs are properly initialized."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         assert hasattr(configurator, "toolkit_configs")
         assert isinstance(configurator.toolkit_configs, list)
         # Should have exactly 4 configs: GoogleDrive, Jira, JiraTriager, SystemPromptExtension
@@ -111,12 +96,7 @@ class TestJiraTriagerBasics:
 
     def test_jira_configs_present(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that Jira-related configs are present."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
 
         # Check for JiraConfig
         jira_config_present = any(isinstance(config, JiraConfig) for config in configurator.toolkit_configs)
@@ -128,12 +108,7 @@ class TestJiraTriagerBasics:
 
     def test_jira_triager_config_is_required(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that JiraTriagerToolkitConfig is marked as required."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         triager_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraTriagerToolkitConfig)), None)
         assert triager_config is not None
         assert triager_config.is_required() is True
@@ -180,12 +155,7 @@ class TestJiraAuthentication:
         assert "✅" in content or "success" in content.lower() or "configured" in content.lower()
 
         # Verify token is stored by creating a fresh configurator
-        configurator = JiraTriagerConfigurator(
-            user_id=user_id,
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id=user_id, session_id=None, shared_db=shared_db, token_storage=token_storage)
         jira_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraConfig)), None)
         assert jira_config is not None
         assert jira_config.is_configured(user_id)
@@ -196,12 +166,7 @@ class TestSystemPromptConfiguration:
 
     def test_google_drive_config_always_included(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that GoogleDriveConfig is always included (required)."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
 
         from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveConfig
 
@@ -210,12 +175,7 @@ class TestSystemPromptConfiguration:
 
     def test_system_prompt_config_always_included(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that SystemPromptExtensionConfig is always included (required)."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
 
         from agentllm.agents.toolkit_configs.system_prompt_extension_config import SystemPromptExtensionConfig
 
@@ -224,12 +184,7 @@ class TestSystemPromptConfiguration:
 
     def test_config_order(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that configs are in correct order (GoogleDrive before SystemPrompt)."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
 
         from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveConfig
         from agentllm.agents.toolkit_configs.system_prompt_extension_config import SystemPromptExtensionConfig
@@ -247,34 +202,19 @@ class TestAgentMetadata:
 
     def test_agent_name(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that agent has correct name."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         assert configurator._get_agent_name() == "jira-triager"
 
     def test_agent_description(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that agent has a description."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         description = configurator._get_agent_description()
         assert description is not None
         assert len(description) > 0
 
     def test_agent_instructions(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that agent has comprehensive instructions."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         instructions = configurator._build_agent_instructions()
 
         assert isinstance(instructions, list)
@@ -289,12 +229,7 @@ class TestAgentMetadata:
 
     def test_model_params_include_thinking(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that model params include Gemini thinking configuration."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         model_params = configurator._build_model_params()
 
         # Check for thinking parameters
@@ -309,12 +244,7 @@ class TestToolkitDependencies:
 
     def test_jira_triager_depends_on_jira_config(self, shared_db: SqliteDb, token_storage: TokenStorageType):
         """Test that JiraTriagerToolkitConfig properly depends on JiraConfig."""
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
 
         jira_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraConfig)), None)
         triager_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraTriagerToolkitConfig)), None)
@@ -348,12 +278,7 @@ class TestToolkitDependencies:
         agent.run(f"My Jira token is {mock_jira_token}", user_id=user_id)
 
         # Create fresh configurator to check configuration state
-        configurator = JiraTriagerConfigurator(
-            user_id=user_id,
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id=user_id, session_id=None, shared_db=shared_db, token_storage=token_storage)
         jira_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraConfig)), None)
         triager_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraTriagerToolkitConfig)), None)
 
@@ -393,12 +318,7 @@ class TestErrorHandling:
         user2 = "test-user-multi-2"
 
         # Both users should start unconfigured
-        configurator = JiraTriagerConfigurator(
-            user_id="test-user",
-            session_id=None,
-            shared_db=shared_db,
-            token_storage=token_storage
-        )
+        configurator = JiraTriagerConfigurator(user_id="test-user", session_id=None, shared_db=shared_db, token_storage=token_storage)
         jira_config = next((c for c in configurator.toolkit_configs if isinstance(c, JiraConfig)), None)
         assert not jira_config.is_configured(user1)
         assert not jira_config.is_configured(user2)

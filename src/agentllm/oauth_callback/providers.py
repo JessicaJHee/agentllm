@@ -7,10 +7,18 @@ from multiple providers (Google Drive, GitHub, etc.).
 import os
 from abc import ABC, abstractmethod
 
+import requests
+from google.auth.exceptions import GoogleAuthError
 from google_auth_oauthlib.flow import Flow
 from loguru import logger
 
 from agentllm.db.token_storage import TokenStorage
+from agentllm.oauth_callback.state_validation import (
+    StateTokenError,
+    StateTokenExpiredError,
+    StateTokenInvalidError,
+    validate_state_token,
+)
 
 
 class OAuthProvider(ABC):
@@ -73,13 +81,24 @@ class GoogleDriveProvider(OAuthProvider):
 
         Args:
             code: OAuth authorization code
-            state: State parameter (user_id)
+            state: Signed JWT state token containing user_id
             redirect_uri: Redirect URI used in the OAuth flow
 
         Returns:
             Tuple of (success: bool, message: str)
         """
-        user_id = state
+        # Validate state token to prevent CSRF attacks
+        try:
+            user_id = validate_state_token(state)
+        except StateTokenExpiredError as e:
+            logger.warning(f"Google Drive OAuth state token expired: {e}")
+            return False, "Authorization expired. Please try again."
+        except StateTokenInvalidError as e:
+            logger.error(f"Google Drive OAuth invalid state token (possible CSRF attack): {e}")
+            return False, "Invalid authorization request. Please try again."
+        except StateTokenError as e:
+            logger.error(f"Google Drive OAuth state token error: {e}")
+            return False, "Authorization failed. Please try again."
 
         try:
             logger.info(f"Exchanging Google Drive authorization code for user {user_id}")
@@ -99,15 +118,16 @@ class GoogleDriveProvider(OAuthProvider):
                 redirect_uri=redirect_uri,
             )
 
-            # Exchange code for token
-            flow.fetch_token(code=code)
+            # Exchange code for token (with timeout to prevent DoS)
+            # Note: Flow.fetch_token internally uses requests with timeout
+            flow.fetch_token(code=code, timeout=10)
 
             # Get credentials
             credentials = flow.credentials
 
             if not credentials:
                 logger.error(f"Failed to get credentials for user {user_id}")
-                return False, "Failed to exchange authorization code for credentials"
+                return False, "Failed to complete authorization"
 
             logger.info(f"✅ Successfully exchanged code for Google Drive token (user: {user_id})")
             logger.info(f"📊 Token details for user {user_id}:")
@@ -127,16 +147,25 @@ class GoogleDriveProvider(OAuthProvider):
 
             if not success:
                 logger.error(f"Failed to store Google Drive token for user {user_id}")
-                return False, "Database storage failed"
+                return False, "Failed to save credentials"
 
             logger.info(f"✅ Stored Google Drive token in database for user {user_id}")
             logger.debug(f"📂 Token stored at: {self.token_storage.db_path}")
 
             return True, f"Successfully authenticated Google Drive for user {user_id}"
 
+        except GoogleAuthError as e:
+            logger.error(f"Google Drive OAuth authentication error for user {user_id}: {e}")
+            return False, "Google authentication failed. Please try again."
+        except requests.exceptions.Timeout as e:
+            logger.error(f"Google Drive OAuth timeout for user {user_id}: {e}")
+            return False, "Authorization request timed out. Please try again."
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Google Drive OAuth network error for user {user_id}: {e}")
+            return False, "Network error during authorization. Please try again."
         except Exception as e:
             logger.error(f"Google Drive OAuth callback failed for user {user_id}: {e}")
-            return False, f"OAuth exchange failed: {str(e)}"
+            return False, "Authorization failed. Please try again."
 
 
 class GitHubProvider(OAuthProvider):
@@ -165,20 +194,29 @@ class GitHubProvider(OAuthProvider):
 
         Args:
             code: OAuth authorization code
-            state: State parameter (user_id)
+            state: Signed JWT state token containing user_id
             redirect_uri: Redirect URI used in the OAuth flow
 
         Returns:
             Tuple of (success: bool, message: str)
         """
-        user_id = state
+        # Validate state token to prevent CSRF attacks
+        try:
+            user_id = validate_state_token(state)
+        except StateTokenExpiredError as e:
+            logger.warning(f"GitHub OAuth state token expired: {e}")
+            return False, "Authorization expired. Please try again."
+        except StateTokenInvalidError as e:
+            logger.error(f"GitHub OAuth invalid state token (possible CSRF attack): {e}")
+            return False, "Invalid authorization request. Please try again."
+        except StateTokenError as e:
+            logger.error(f"GitHub OAuth state token error: {e}")
+            return False, "Authorization failed. Please try again."
 
         try:
-            import requests
-
             logger.info(f"Exchanging GitHub authorization code for user {user_id}")
 
-            # Exchange code for token
+            # Exchange code for token (with timeout to prevent DoS)
             token_response = requests.post(
                 "https://github.com/login/oauth/access_token",
                 headers={"Accept": "application/json"},
@@ -188,6 +226,7 @@ class GitHubProvider(OAuthProvider):
                     "code": code,
                     "redirect_uri": redirect_uri,
                 },
+                timeout=10,  # 10 second timeout to prevent DoS
             )
 
             token_response.raise_for_status()
@@ -195,20 +234,21 @@ class GitHubProvider(OAuthProvider):
 
             if "error" in token_data:
                 logger.error(f"GitHub OAuth error for user {user_id}: {token_data.get('error_description')}")
-                return False, f"GitHub OAuth error: {token_data.get('error_description')}"
+                return False, "GitHub authorization failed. Please try again."
 
             access_token = token_data.get("access_token")
             if not access_token:
                 logger.error(f"No access token in GitHub response for user {user_id}")
-                return False, "No access token in response"
+                return False, "Failed to receive access token from GitHub"
 
-            # Get user info
+            # Get user info (with timeout to prevent DoS)
             user_response = requests.get(
                 "https://api.github.com/user",
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Accept": "application/vnd.github+json",
                 },
+                timeout=10,  # 10 second timeout to prevent DoS
             )
             user_response.raise_for_status()
             user_data = user_response.json()
@@ -233,15 +273,24 @@ class GitHubProvider(OAuthProvider):
 
             if not success:
                 logger.error(f"Failed to store GitHub token for user {user_id}")
-                return False, "Database storage failed"
+                return False, "Failed to save credentials"
 
             logger.info(f"✅ Stored GitHub token in database for user {user_id}")
 
             return True, f"Successfully authenticated GitHub for user {user_id} ({username})"
 
+        except requests.exceptions.Timeout as e:
+            logger.error(f"GitHub OAuth timeout for user {user_id}: {e}")
+            return False, "Authorization request timed out. Please try again."
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"GitHub OAuth HTTP error for user {user_id}: {e}")
+            return False, "GitHub authorization failed. Please try again."
+        except requests.exceptions.RequestException as e:
+            logger.error(f"GitHub OAuth network error for user {user_id}: {e}")
+            return False, "Network error during authorization. Please try again."
         except Exception as e:
             logger.error(f"GitHub OAuth callback failed for user {user_id}: {e}")
-            return False, f"OAuth exchange failed: {str(e)}"
+            return False, "Authorization failed. Please try again."
 
 
 class ProviderRegistry:

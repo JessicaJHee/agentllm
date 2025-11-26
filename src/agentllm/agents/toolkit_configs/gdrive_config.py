@@ -475,7 +475,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         """Generate Google Drive OAuth URL for user authorization.
 
         Args:
-            user_id: User identifier (used as OAuth state parameter)
+            user_id: User identifier (encoded in signed state token for CSRF protection)
 
         Returns:
             OAuth authorization URL
@@ -506,11 +506,16 @@ class GoogleDriveConfig(BaseToolkitConfig):
         )
         flow.redirect_uri = self._gdrive_redirect_uri
 
-        # Generate authorization URL with state parameter
+        # Generate CSRF-protected state token
+        from agentllm.oauth_callback.state_validation import generate_state_token
+
+        state_token = generate_state_token(user_id)
+
+        # Generate authorization URL with signed state token for CSRF protection
         auth_url, _ = flow.authorization_url(
             access_type="offline",
             include_granted_scopes=False,  # Don't include previously granted scopes
-            state=user_id,
+            state=state_token,  # Signed JWT token containing user_id
             prompt="consent",  # Force consent screen to ensure refresh_token
         )
 
