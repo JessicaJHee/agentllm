@@ -29,7 +29,11 @@ if env_secrets.exists():
 # Add src to path so we can import agentllm
 sys.path.insert(0, str(repo_root / "src"))
 
+# Discover and register all toolkit token types
+from agentllm.agents.toolkit_configs import discover_and_register_toolkits  # noqa: E402
 from agentllm.db.token_storage import TokenStorage  # noqa: E402
+
+discover_and_register_toolkits()
 
 
 def get_db_and_storage(db_path: str = "tmp/agent-data/agno_sessions.db") -> tuple[SqliteDb, TokenStorage]:
@@ -79,7 +83,7 @@ def list(db: str):
         click.echo("📋 JIRA TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import JiraToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
 
         jira_tokens = session.query(JiraToken).order_by(JiraToken.updated_at.desc()).all()
 
@@ -102,7 +106,7 @@ def list(db: str):
         click.echo("📁 GOOGLE DRIVE TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
 
         gdrive_tokens = session.query(GoogleDriveToken).order_by(GoogleDriveToken.updated_at.desc()).all()
 
@@ -125,7 +129,7 @@ def list(db: str):
         click.echo("🐙 GITHUB TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import GitHubToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
 
         github_tokens = session.query(GitHubToken).order_by(GitHubToken.updated_at.desc()).all()
 
@@ -148,7 +152,7 @@ def list(db: str):
         click.echo("🔴 RED HAT CUSTOMER PORTAL TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import RHCPToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         rhcp_tokens = session.query(RHCPToken).order_by(RHCPToken.updated_at.desc()).all()
 
@@ -188,7 +192,10 @@ def users(db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GitHubToken, GoogleDriveToken, JiraToken, RHCPToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         # Get unique user IDs from all token tables
         user_ids = set()
@@ -225,7 +232,8 @@ def first_user(db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GoogleDriveToken, JiraToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
 
         # Find users with both Jira and Google Drive tokens (Release Manager requirement)
         jira_users = {token.user_id for token in session.query(JiraToken).all()}
@@ -269,7 +277,10 @@ def details(user_id: str, db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GitHubToken, GoogleDriveToken, JiraToken, RHCPToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         # Jira Token
         click.echo("📋 Jira Token:")
@@ -334,7 +345,10 @@ def delete(user_id: str, db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GitHubToken, GoogleDriveToken, JiraToken, RHCPToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         # Delete tokens from all tables
         jira_deleted = session.query(JiraToken).filter_by(user_id=user_id).delete()
