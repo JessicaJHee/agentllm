@@ -5,8 +5,8 @@ import os
 
 from loguru import logger
 
-from agentllm.tools.jira_triager_toolkit import JiraTriagerTools
 from agentllm.agents.toolkit_configs.base import BaseToolkitConfig
+from agentllm.tools.jira_triager_toolkit import JiraTriagerTools
 
 
 class JiraTriagerToolkitConfig(BaseToolkitConfig):
@@ -58,8 +58,8 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
             return False
 
         # Check if user has both Jira and Google Drive credentials
-        has_jira = self.token_storage.get_jira_token(user_id) is not None
-        has_gdrive = self.token_storage.get_gdrive_credentials(user_id) is not None
+        has_jira = self.token_storage.get_token("jira", user_id) is not None
+        has_gdrive = self.token_storage.get_token("gdrive", user_id) is not None
 
         return has_jira and has_gdrive
 
@@ -123,7 +123,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
             return None
 
         try:
-            token_data = self.token_storage.get_jira_token(user_id)
+            token_data = self.token_storage.get_token("jira", user_id)
             if not token_data:
                 logger.error(f"No Jira token found for user {user_id}")
                 return None
@@ -313,7 +313,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
             return None
 
         # Get Google Drive credentials from token storage
-        gdrive_creds = self.token_storage.get_gdrive_credentials(user_id)
+        gdrive_creds = self.token_storage.get_token("gdrive", user_id)
         if not gdrive_creds:
             logger.error(f"Google Drive not configured for user {user_id}")
             return None
@@ -389,7 +389,6 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
             logger.error(f"Failed to load configuration from Google Drive: {e}")
             return None
 
-
     def _fetch_file_from_gdrive(self, _user_id: str, gdrive_toolkit, file_path: str) -> str | None:
         """Fetch a file from Google Drive folder.
 
@@ -445,6 +444,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
 
             # Download file content
             import io
+
             from googleapiclient.http import MediaIoBaseDownload
 
             fh = io.BytesIO()

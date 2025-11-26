@@ -85,7 +85,7 @@ class JiraConfig(BaseToolkitConfig):
         """
         # Check database storage first (preferred)
         if self.token_storage:
-            token_data = self.token_storage.get_jira_token(user_id)
+            token_data = self.token_storage.get_token("jira", user_id)
             if token_data:
                 return True
 
@@ -143,7 +143,8 @@ class JiraConfig(BaseToolkitConfig):
 
             # Store the token in database if available, otherwise in memory
             if self.token_storage:
-                self.token_storage.upsert_jira_token(
+                self.token_storage.upsert_token(
+                    "jira",
                     user_id=user_id,
                     token=token,
                     server_url=self._jira_server,
@@ -214,7 +215,7 @@ class JiraConfig(BaseToolkitConfig):
         if self.token_storage:
             # Get credentials from database
             try:
-                token_data = self.token_storage.get_jira_token(user_id)
+                token_data = self.token_storage.get_token("jira", user_id)
                 if not token_data:
                     logger.error(f"No Jira token found in database for user {user_id}")
                     return None

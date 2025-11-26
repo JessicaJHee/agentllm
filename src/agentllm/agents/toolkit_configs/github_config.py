@@ -56,7 +56,7 @@ class GitHubConfig(BaseToolkitConfig):
 
         # Check database storage first (preferred)
         if self.token_storage:
-            token_data = self.token_storage.get_github_token(user_id)
+            token_data = self.token_storage.get_token("github", user_id)
             if token_data:
                 logger.info(f"✅ Found GitHub token in database for user {user_id}")
                 return True
@@ -122,7 +122,8 @@ class GitHubConfig(BaseToolkitConfig):
 
             # Store the token in database if available, otherwise in memory
             if self.token_storage:
-                success = self.token_storage.upsert_github_token(
+                success = self.token_storage.upsert_token(
+                    "github",
                     user_id=user_id,
                     token=token,
                     server_url=self._server_url,
@@ -130,7 +131,7 @@ class GitHubConfig(BaseToolkitConfig):
                 if success:
                     logger.info(f"✅ Stored GitHub token in database for user {user_id}")
                     # Verify it was stored
-                    verify = self.token_storage.get_github_token(user_id)
+                    verify = self.token_storage.get_token("github", user_id)
                     if verify:
                         logger.info(f"✅ Verified token retrieval for user {user_id}")
                     else:
@@ -214,7 +215,7 @@ class GitHubConfig(BaseToolkitConfig):
             try:
                 from agentllm.tools.github_toolkit import GitHubToolkit
 
-                token_data = self.token_storage.get_github_token(user_id)
+                token_data = self.token_storage.get_token("github", user_id)
                 if not token_data:
                     logger.error(f"No GitHub token found in database for user {user_id}")
                     return None

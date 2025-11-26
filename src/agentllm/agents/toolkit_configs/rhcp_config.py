@@ -52,7 +52,7 @@ class RHCPConfig(BaseToolkitConfig):
         """
         # Check database storage first (preferred)
         if self.token_storage:
-            token_data = self.token_storage.get_rhcp_token(user_id)
+            token_data = self.token_storage.get_token("rhcp", user_id)
             if token_data:
                 return True
 
@@ -111,7 +111,8 @@ class RHCPConfig(BaseToolkitConfig):
 
             # Store the token in database if available, otherwise in memory
             if self.token_storage:
-                self.token_storage.upsert_rhcp_token(
+                self.token_storage.upsert_token(
+                    "rhcp",
                     user_id=user_id,
                     offline_token=offline_token,
                 )
@@ -188,7 +189,7 @@ class RHCPConfig(BaseToolkitConfig):
         if self.token_storage:
             # Get credentials from database
             try:
-                token_data = self.token_storage.get_rhcp_token(user_id)
+                token_data = self.token_storage.get_token("rhcp", user_id)
                 if not token_data:
                     logger.error(f"No RHCP offline token found in database for user {user_id}")
                     return None

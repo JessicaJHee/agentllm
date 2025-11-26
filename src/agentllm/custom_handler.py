@@ -14,6 +14,7 @@ from loguru import logger
 
 from agentllm.agents.base import AgentRegistry
 from agentllm.db import TokenStorage
+from agentllm.db.encryption import EncryptionKeyMissingError
 from agentllm.utils.logging import safe_log_content
 
 # Configure logging for our custom handler using loguru
@@ -45,9 +46,14 @@ DB_PATH = Path(log_dir) / "agno_sessions.db"
 shared_db = SqliteDb(db_file=str(DB_PATH))
 logger.info(f"Initialized shared database at {DB_PATH}")
 
-# Create token storage using the shared database
-token_storage = TokenStorage(agno_db=shared_db)
-logger.info("Initialized token storage")
+# Create token storage using the shared database (with encryption)
+try:
+    token_storage = TokenStorage(agno_db=shared_db)  # Loads key from AGENTLLM_TOKEN_ENCRYPTION_KEY env var
+    logger.info("Initialized token storage with encryption enabled")
+except EncryptionKeyMissingError as e:
+    logger.error(f"CRITICAL: Token encryption key not configured: {e}")
+    logger.error("Set AGENTLLM_TOKEN_ENCRYPTION_KEY environment variable")
+    raise  # Fail fast - don't start without encryption
 
 # Initialize agent registry and discover plugins
 agent_registry = AgentRegistry()
