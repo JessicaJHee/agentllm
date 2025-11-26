@@ -18,18 +18,25 @@ from pathlib import Path
 
 import click
 from agno.db.sqlite import SqliteDb
+from dotenv import load_dotenv
+
+# Load environment variables from .env.secrets (for encryption key)
+repo_root = Path(__file__).parent.parent
+env_secrets = repo_root / ".env.secrets"
+if env_secrets.exists():
+    load_dotenv(env_secrets)
 
 # Add src to path so we can import agentllm
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(repo_root / "src"))
 
-from agentllm.db.token_storage import TokenStorage
+from agentllm.db.token_storage import TokenStorage  # noqa: E402
 
 
-def get_db_and_storage(db_path: str = "tmp/agno_sessions.db") -> tuple[SqliteDb, TokenStorage]:
+def get_db_and_storage(db_path: str = "tmp/agent-data/agno_sessions.db") -> tuple[SqliteDb, TokenStorage]:
     """Get database and token storage instances.
 
     Args:
-        db_path: Path to the database file
+        db_path: Path to the database file (defaults to containerized database path)
 
     Returns:
         Tuple of (SqliteDb, TokenStorage)
@@ -39,7 +46,9 @@ def get_db_and_storage(db_path: str = "tmp/agno_sessions.db") -> tuple[SqliteDb,
     """
     db_file = Path(db_path)
     if not db_file.exists():
-        raise click.ClickException(f"Database not found: {db_path}\nRun the proxy first to create the database: nox -s proxy")
+        raise click.ClickException(
+            f"Database not found: {db_path}\nRun the development stack first: just dev\nOr for local proxy mode: nox -s proxy"
+        )
 
     db = SqliteDb(db_file=str(db_file))
     storage = TokenStorage(agno_db=db)
@@ -53,7 +62,7 @@ def cli():
 
 
 @cli.command()
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def list(db: str):
     """List all users and their tokens."""
     _, storage = get_db_and_storage(db)
@@ -172,7 +181,7 @@ def list(db: str):
 
 
 @cli.command()
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def users(db: str):
     """List all unique user IDs."""
     _, storage = get_db_and_storage(db)
@@ -205,7 +214,7 @@ def users(db: str):
 
 
 @cli.command()
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def first_user(db: str):
     """Get the first configured user ID (with both Jira and Google Drive tokens).
 
@@ -227,9 +236,7 @@ def first_user(db: str):
 
         if both_tokens:
             # Get the most recently updated one
-            most_recent = session.query(JiraToken).filter(
-                JiraToken.user_id.in_(both_tokens)
-            ).order_by(JiraToken.updated_at.desc()).first()
+            most_recent = session.query(JiraToken).filter(JiraToken.user_id.in_(both_tokens)).order_by(JiraToken.updated_at.desc()).first()
             if most_recent:
                 click.echo(most_recent.user_id)
                 return
@@ -250,7 +257,7 @@ def first_user(db: str):
 
 @cli.command()
 @click.argument("user_id")
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def details(user_id: str, db: str):
     """Show detailed token information for a specific user."""
     _, storage = get_db_and_storage(db)
@@ -319,7 +326,7 @@ def details(user_id: str, db: str):
 
 @cli.command()
 @click.argument("user_id")
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 @click.confirmation_option(prompt="Are you sure you want to delete all tokens for this user?")
 def delete(user_id: str, db: str):
     """Delete all tokens for a specific user (requires confirmation)."""
