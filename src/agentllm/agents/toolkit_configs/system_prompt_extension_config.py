@@ -184,10 +184,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         # If Google Drive is not configured for this user, skip silently
         # (GoogleDriveConfig will handle prompting the user)
         if not self._gdrive_config.is_configured(user_id):
-            logger.info(
-                f"System prompt extension skipped for user {user_id}: "
-                f"document URL is set but Google Drive not configured"
-            )
+            logger.info(f"System prompt extension skipped for user {user_id}: document URL is set but Google Drive not configured")
             return []
 
         # Google Drive is configured, so fetching the prompt is required

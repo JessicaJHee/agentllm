@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -24,6 +24,7 @@ dependencies = [
     { name = "litellm", extra = ["proxy"] },
     { name = "loguru" },
     { name = "pandas" },
+    { name = "pyjwt" },
     { name = "pypdf" },
     { name = "requests" },
     { name = "rich" },
@@ -54,6 +55,7 @@ requires-dist = [
     { name = "litellm", extras = ["proxy"], specifier = ">=1.79.1" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pandas", specifier = ">=2.0.0" },
+    { name = "pyjwt", specifier = ">=2.8.0" },
     { name = "pypdf", specifier = ">=5.1.0" },
     { name = "requests", specifier = ">=2.32.0" },
     { name = "rich", specifier = ">=13.7.1" },

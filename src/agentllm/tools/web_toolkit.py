@@ -30,8 +30,7 @@ class WebToolkit(Toolkit):
             **kwargs: Additional arguments passed to parent Toolkit
         """
         self._user_agent = user_agent or (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
 
         tools: list = []
@@ -65,6 +64,7 @@ class WebToolkit(Toolkit):
 
             # Validate domain - only allow *.redhat.com
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
 

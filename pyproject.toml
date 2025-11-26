@@ -17,6 +17,7 @@ dependencies = [
   "tantivy>=0.22.0",
   "pypdf>=5.1.0",
   "pandas>=2.0.0",
+  "pyjwt>=2.8.0",
 ]
 description = "Custom LiteLLM provider for Agno agents - OpenAI-compatible API for Agno"
 name = "agentllm"

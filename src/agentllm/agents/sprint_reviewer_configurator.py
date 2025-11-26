@@ -193,7 +193,7 @@ Team <Team Name>
 - **Format for listing Standalone Issues (not grouped):**
   - [<status>] <issue summary> ([ISSUE-ID](https://issues.redhat.com/browse/ISSUE-ID))
   If epic has only 1 issue, you MUST list only the issue.
-  Don't use status for Next sprint section, use only: <issue summary> ([ISSUE-ID](https://issues.redhat.com/browse/ISSUE-ID)) 
+  Don't use status for Next sprint section, use only: <issue summary> ([ISSUE-ID](https://issues.redhat.com/browse/ISSUE-ID))
 - **Ordering of listed issues:**
   - Order issues by priority: Blocker, Major, Normal, Minor, Undefined
   - Within epic groups, also order sub-issues by priority
@@ -253,4 +253,3 @@ Team <Team Name>
         """
         # No cross-config dependencies for Sprint Reviewer
         pass
-

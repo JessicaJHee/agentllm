@@ -46,13 +46,13 @@ from pathlib import Path
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
-from loguru import logger
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
+from loguru import logger  # noqa: E402
+from rich.console import Console  # noqa: E402
+from rich.panel import Panel  # noqa: E402
+from rich.table import Table  # noqa: E402
 
-from agentllm.db.token_storage import TokenStorage
-from agentllm.tools.rhai_toolkit import RHAITools
+from agentllm.db.token_storage import TokenStorage  # noqa: E402
+from agentllm.tools.rhai_toolkit import RHAITools  # noqa: E402
 
 # Initialize rich console
 console = Console()
@@ -120,7 +120,7 @@ Note: The user must have authorized Google Drive through the agent first.
 
         # Get Google Drive credentials from token storage
         with console.status(f"[bold cyan]🔑 Fetching Google Drive credentials for user: {args.user_id}[/bold cyan]"):
-            credentials = token_storage.get_gdrive_credentials(args.user_id)
+            credentials = token_storage.get_token("gdrive", args.user_id)
 
         if not credentials:
             console.print(f"[bold red]❌ Error:[/bold red] No Google Drive credentials found for user: [cyan]{args.user_id}[/cyan]")

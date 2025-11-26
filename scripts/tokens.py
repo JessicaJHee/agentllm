@@ -18,18 +18,41 @@ from pathlib import Path
 
 import click
 from agno.db.sqlite import SqliteDb
+from dotenv import load_dotenv
+
+# Load environment variables from .env.secrets (for encryption key)
+repo_root = Path(__file__).parent.parent
+env_secrets = repo_root / ".env.secrets"
+if env_secrets.exists():
+    load_dotenv(env_secrets)
+else:
+    click.echo(
+        click.style("⚠️  Warning: .env.secrets not found", fg="yellow", bold=True),
+        err=True,
+    )
+    click.echo(
+        "\nThis script requires AGENTLLM_TOKEN_ENCRYPTION_KEY to be set.\n"
+        "Either:\n"
+        "  1. Create .env.secrets from .env.secrets.template, or\n"
+        "  2. Set AGENTLLM_TOKEN_ENCRYPTION_KEY in your environment\n",
+        err=True,
+    )
 
 # Add src to path so we can import agentllm
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(repo_root / "src"))
 
-from agentllm.db.token_storage import TokenStorage
+# Discover and register all toolkit token types
+from agentllm.agents.toolkit_configs import discover_and_register_toolkits  # noqa: E402
+from agentllm.db.token_storage import TokenStorage  # noqa: E402
+
+discover_and_register_toolkits()
 
 
-def get_db_and_storage(db_path: str = "tmp/agno_sessions.db") -> tuple[SqliteDb, TokenStorage]:
+def get_db_and_storage(db_path: str = "tmp/agent-data/agno_sessions.db") -> tuple[SqliteDb, TokenStorage]:
     """Get database and token storage instances.
 
     Args:
-        db_path: Path to the database file
+        db_path: Path to the database file (defaults to containerized database path)
 
     Returns:
         Tuple of (SqliteDb, TokenStorage)
@@ -39,7 +62,9 @@ def get_db_and_storage(db_path: str = "tmp/agno_sessions.db") -> tuple[SqliteDb,
     """
     db_file = Path(db_path)
     if not db_file.exists():
-        raise click.ClickException(f"Database not found: {db_path}\nRun the proxy first to create the database: nox -s proxy")
+        raise click.ClickException(
+            f"Database not found: {db_path}\nRun the development stack first: just dev\nOr for local proxy mode: nox -s proxy"
+        )
 
     db = SqliteDb(db_file=str(db_file))
     storage = TokenStorage(agno_db=db)
@@ -53,7 +78,7 @@ def cli():
 
 
 @cli.command()
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def list(db: str):
     """List all users and their tokens."""
     _, storage = get_db_and_storage(db)
@@ -70,7 +95,7 @@ def list(db: str):
         click.echo("📋 JIRA TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import JiraToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
 
         jira_tokens = session.query(JiraToken).order_by(JiraToken.updated_at.desc()).all()
 
@@ -93,7 +118,7 @@ def list(db: str):
         click.echo("📁 GOOGLE DRIVE TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
 
         gdrive_tokens = session.query(GoogleDriveToken).order_by(GoogleDriveToken.updated_at.desc()).all()
 
@@ -116,7 +141,7 @@ def list(db: str):
         click.echo("🐙 GITHUB TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import GitHubToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
 
         github_tokens = session.query(GitHubToken).order_by(GitHubToken.updated_at.desc()).all()
 
@@ -139,7 +164,7 @@ def list(db: str):
         click.echo("🔴 RED HAT CUSTOMER PORTAL TOKENS")
         click.echo("─" * 80)
 
-        from agentllm.db.token_storage import RHCPToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         rhcp_tokens = session.query(RHCPToken).order_by(RHCPToken.updated_at.desc()).all()
 
@@ -172,14 +197,17 @@ def list(db: str):
 
 
 @cli.command()
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def users(db: str):
     """List all unique user IDs."""
     _, storage = get_db_and_storage(db)
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GitHubToken, GoogleDriveToken, JiraToken, RHCPToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         # Get unique user IDs from all token tables
         user_ids = set()
@@ -205,7 +233,7 @@ def users(db: str):
 
 
 @cli.command()
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def first_user(db: str):
     """Get the first configured user ID (with both Jira and Google Drive tokens).
 
@@ -216,7 +244,8 @@ def first_user(db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GoogleDriveToken, JiraToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
 
         # Find users with both Jira and Google Drive tokens (Release Manager requirement)
         jira_users = {token.user_id for token in session.query(JiraToken).all()}
@@ -227,9 +256,7 @@ def first_user(db: str):
 
         if both_tokens:
             # Get the most recently updated one
-            most_recent = session.query(JiraToken).filter(
-                JiraToken.user_id.in_(both_tokens)
-            ).order_by(JiraToken.updated_at.desc()).first()
+            most_recent = session.query(JiraToken).filter(JiraToken.user_id.in_(both_tokens)).order_by(JiraToken.updated_at.desc()).first()
             if most_recent:
                 click.echo(most_recent.user_id)
                 return
@@ -250,7 +277,7 @@ def first_user(db: str):
 
 @cli.command()
 @click.argument("user_id")
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 def details(user_id: str, db: str):
     """Show detailed token information for a specific user."""
     _, storage = get_db_and_storage(db)
@@ -262,7 +289,10 @@ def details(user_id: str, db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GitHubToken, GoogleDriveToken, JiraToken, RHCPToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         # Jira Token
         click.echo("📋 Jira Token:")
@@ -319,7 +349,7 @@ def details(user_id: str, db: str):
 
 @cli.command()
 @click.argument("user_id")
-@click.option("--db", default="tmp/agno_sessions.db", help="Path to database file")
+@click.option("--db", default="tmp/agent-data/agno_sessions.db", help="Path to database file")
 @click.confirmation_option(prompt="Are you sure you want to delete all tokens for this user?")
 def delete(user_id: str, db: str):
     """Delete all tokens for a specific user (requires confirmation)."""
@@ -327,7 +357,10 @@ def delete(user_id: str, db: str):
 
     session = storage.Session()
     try:
-        from agentllm.db.token_storage import GitHubToken, GoogleDriveToken, JiraToken, RHCPToken
+        from agentllm.agents.toolkit_configs.gdrive_config import GoogleDriveToken
+        from agentllm.agents.toolkit_configs.github_config import GitHubToken
+        from agentllm.agents.toolkit_configs.jira_config import JiraToken
+        from agentllm.agents.toolkit_configs.rhcp_config import RHCPToken
 
         # Delete tokens from all tables
         jira_deleted = session.query(JiraToken).filter_by(user_id=user_id).delete()

@@ -113,7 +113,7 @@ def get_configured_user_id() -> str | None:
 
 ### Database Location
 
-By default, the script uses `tmp/agno_sessions.db`. You can override this with the `--db` flag:
+By default, the script uses `tmp/agent-data/agno_sessions.db`. You can override this with the `--db` flag:
 
 ```bash
 uv run python scripts/tokens.py list --db /path/to/custom.db

@@ -3,16 +3,98 @@
 import json
 import os
 import re
+from datetime import datetime
+from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import declarative_base
 
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 from agentllm.tools.gdrive_toolkit import GoogleDriveTools
 
 from .base import BaseToolkitConfig
+
+# Define token model for Google Drive
+Base = declarative_base()
+
+
+class GoogleDriveToken(Base):
+    """Table for storing Google Drive OAuth tokens."""
+
+    __tablename__ = "gdrive_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    token = Column(String, nullable=False)
+    refresh_token = Column(String, nullable=True)
+    token_uri = Column(String, nullable=True)
+    client_id = Column(String, nullable=True)
+    client_secret = Column(String, nullable=True)
+    scopes = Column(Text, nullable=True)  # JSON array of scopes
+    expiry = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+def serialize_gdrive_credentials(credentials: Credentials) -> dict[str, Any]:
+    """Serialize Google OAuth2 Credentials to dict.
+
+    Args:
+        credentials: Google OAuth2 credentials object
+
+    Returns:
+        Dictionary with all credential fields
+    """
+    return {
+        "token": credentials.token,
+        "refresh_token": credentials.refresh_token,
+        "token_uri": credentials.token_uri,
+        "client_id": credentials.client_id,
+        "client_secret": credentials.client_secret,
+        "scopes": json.dumps(credentials.scopes) if credentials.scopes else None,
+        "expiry": credentials.expiry,
+    }
+
+
+def deserialize_gdrive_credentials(data: dict[str, Any]) -> Credentials:
+    """Deserialize dict to Google OAuth2 Credentials.
+
+    Args:
+        data: Dictionary with credential fields
+
+    Returns:
+        Google OAuth2 Credentials object
+    """
+    credentials = Credentials(
+        token=data["token"],
+        refresh_token=data.get("refresh_token"),
+        token_uri=data.get("token_uri"),
+        client_id=data.get("client_id"),
+        client_secret=data.get("client_secret"),
+        scopes=json.loads(data["scopes"]) if data.get("scopes") else None,
+    )
+
+    if data.get("expiry"):
+        credentials.expiry = data["expiry"]
+
+    return credentials
+
+
+# Register Google Drive token type with global registry
+get_global_registry().register(
+    "gdrive",
+    TokenTypeConfig(
+        model=GoogleDriveToken,
+        encrypted_fields=["token", "refresh_token", "client_secret"],
+        serializer=serialize_gdrive_credentials,
+        deserializer=deserialize_gdrive_credentials,
+    ),
+)
 
 
 class GoogleDriveConfig(BaseToolkitConfig):
@@ -66,7 +148,20 @@ class GoogleDriveConfig(BaseToolkitConfig):
         # Google Drive OAuth configuration from environment
         self._gdrive_client_id = os.environ.get("GDRIVE_CLIENT_ID")
         self._gdrive_client_secret = os.environ.get("GDRIVE_CLIENT_SECRET")
-        self._gdrive_redirect_uri = "http://localhost"
+
+        # Determine redirect URI based on environment
+        # Production: Use OAuth callback server
+        # Local dev: Use localhost for manual code paste
+        callback_base_url = os.environ.get("AGENTLLM_OAUTH_CALLBACK_BASE_URL")
+        if callback_base_url:
+            # Production: redirect to OAuth callback server
+            self._gdrive_redirect_uri = f"{callback_base_url}/agentllm/oauth/callback/google"
+            self._use_callback_server = True
+        else:
+            # Local dev: redirect to localhost (manual code paste)
+            self._gdrive_redirect_uri = "http://localhost"
+            self._use_callback_server = False
+
         self._gdrive_scopes = [
             "https://www.googleapis.com/auth/drive.readonly",
             "https://www.googleapis.com/auth/documents.readonly",
@@ -88,7 +183,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         """
         # Check database storage first (preferred)
         if self.token_storage:
-            creds = self.token_storage.get_gdrive_credentials(user_id)
+            creds = self.token_storage.get_token("gdrive", user_id)
             if creds:
                 return True
 
@@ -137,7 +232,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
 
             # Store the credentials in database if available, otherwise in memory
             if self.token_storage:
-                self.token_storage.upsert_gdrive_token(user_id, creds)
+                self.token_storage.upsert_token("gdrive", user_id, credentials=creds)
                 logger.info(f"Stored Google Drive credentials in database for user {user_id}")
             else:
                 # Fall back to in-memory storage (legacy)
@@ -180,17 +275,30 @@ class GoogleDriveConfig(BaseToolkitConfig):
         # Generate OAuth URL and return prompt
         try:
             oauth_url = self._generate_gdrive_oauth_url(user_id)
-            prompt = (
-                "🔐 **Google Drive Authorization Required**\n\n"
-                "To use this agent, you need to authorize Google Drive access:\n\n"
-                f"1. **Visit this URL**: {oauth_url}\n"
-                "2. Sign in and authorize the application\n"
-                "3. After authorizing, you'll be redirected to a page that won't load\n"
-                "4. **Copy the entire URL** from your browser's address bar\n"
-                "   It will look like: `http://localhost?code=4/0AeaYSHB...`\n"
-                "5. **Paste the URL here** (or just the code starting with '4/')\n\n"
-                "Once authorized, you'll be able to use the agent."
-            )
+
+            if self._use_callback_server:
+                # Production: OAuth callback server handles the flow automatically
+                prompt = (
+                    "🔐 **Google Drive Authorization Required**\n\n"
+                    "To use this agent, you need to authorize Google Drive access:\n\n"
+                    f"1. **[Click here to authorize Google Drive]({oauth_url})**\n"
+                    "2. Sign in and authorize the application\n"
+                    "3. You'll be automatically redirected to a confirmation page\n\n"
+                    "Once authorized, return here and you'll be able to use Google Drive features."
+                )
+            else:
+                # Local dev: Manual code paste required
+                prompt = (
+                    "🔐 **Google Drive Authorization Required**\n\n"
+                    "To use this agent, you need to authorize Google Drive access:\n\n"
+                    f"1. **Visit this URL**: {oauth_url}\n"
+                    "2. Sign in and authorize the application\n"
+                    "3. After authorizing, you'll be redirected to a page that won't load\n"
+                    "4. **Copy the entire URL** from your browser's address bar\n"
+                    "   It will look like: `http://localhost?code=4/0AeaYSHB...`\n"
+                    "5. **Paste the URL here** (or just the code starting with '4/')\n\n"
+                    "Once authorized, you'll be able to use the agent."
+                )
             return prompt
         except ValueError as e:
             # OAuth not configured
@@ -248,17 +356,30 @@ class GoogleDriveConfig(BaseToolkitConfig):
         # User needs to authorize - generate OAuth URL
         try:
             oauth_url = self._generate_gdrive_oauth_url(user_id)
-            prompt = (
-                "🔐 **Google Drive Authorization Required**\n\n"
-                "To access Google Drive documents, please authorize:\n\n"
-                f"1. **Visit this URL**: {oauth_url}\n"
-                "2. Sign in and authorize the application\n"
-                "3. After authorizing, you'll be redirected to a page that won't load\n"
-                "4. **Copy the entire URL** from your browser's address bar\n"
-                "   It will look like: `http://localhost?code=4/0AeaYSHB...`\n"
-                "5. **Paste the URL here** (or just the code starting with '4/')\n\n"
-                "Once authorized, I'll be able to access your Google Drive documents."
-            )
+
+            if self._use_callback_server:
+                # Production: OAuth callback server handles the flow automatically
+                prompt = (
+                    "🔐 **Google Drive Authorization Required**\n\n"
+                    "To access Google Drive documents, please authorize:\n\n"
+                    f"1. **[Click here to authorize Google Drive]({oauth_url})**\n"
+                    "2. Sign in and authorize the application\n"
+                    "3. You'll be automatically redirected to a confirmation page\n\n"
+                    "Once authorized, return here and I'll be able to access your Google Drive documents."
+                )
+            else:
+                # Local dev: Manual code paste required
+                prompt = (
+                    "🔐 **Google Drive Authorization Required**\n\n"
+                    "To access Google Drive documents, please authorize:\n\n"
+                    f"1. **Visit this URL**: {oauth_url}\n"
+                    "2. Sign in and authorize the application\n"
+                    "3. After authorizing, you'll be redirected to a page that won't load\n"
+                    "4. **Copy the entire URL** from your browser's address bar\n"
+                    "   It will look like: `http://localhost?code=4/0AeaYSHB...`\n"
+                    "5. **Paste the URL here** (or just the code starting with '4/')\n\n"
+                    "Once authorized, I'll be able to access your Google Drive documents."
+                )
             return prompt
 
         except ValueError as e:
@@ -354,7 +475,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         """Generate Google Drive OAuth URL for user authorization.
 
         Args:
-            user_id: User identifier (used as OAuth state parameter)
+            user_id: User identifier (encoded in signed state token for CSRF protection)
 
         Returns:
             OAuth authorization URL
@@ -367,10 +488,13 @@ class GoogleDriveConfig(BaseToolkitConfig):
                 "Google Drive OAuth is not configured. Please set GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET environment variables."
             )
 
+        # Use "web" for production callback server, "installed" for local dev
+        client_type = "web" if self._use_callback_server else "installed"
+
         # Create OAuth flow
         flow = Flow.from_client_config(
             {
-                "installed": {
+                client_type: {
                     "client_id": self._gdrive_client_id,
                     "client_secret": self._gdrive_client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -382,11 +506,16 @@ class GoogleDriveConfig(BaseToolkitConfig):
         )
         flow.redirect_uri = self._gdrive_redirect_uri
 
-        # Generate authorization URL with state parameter
+        # Generate CSRF-protected state token
+        from agentllm.oauth_callback.state_validation import generate_state_token
+
+        state_token = generate_state_token(user_id)
+
+        # Generate authorization URL with signed state token for CSRF protection
         auth_url, _ = flow.authorization_url(
             access_type="offline",
             include_granted_scopes=False,  # Don't include previously granted scopes
-            state=user_id,
+            state=state_token,  # Signed JWT token containing user_id
             prompt="consent",  # Force consent screen to ensure refresh_token
         )
 
@@ -450,7 +579,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
 
         # Try to get from database first (preferred)
         if self.token_storage:
-            creds = self.token_storage.get_gdrive_credentials(user_id)
+            creds = self.token_storage.get_token("gdrive", user_id)
             if creds:
                 logger.debug(f"Retrieved Google Drive credentials from database for user {user_id}")
 
@@ -459,7 +588,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
                     try:
                         creds.refresh(Request())
                         # Update stored credentials with new token
-                        self.token_storage.upsert_gdrive_token(user_id, creds)
+                        self.token_storage.upsert_token("gdrive", user_id, credentials=creds)
                         logger.info(f"Refreshed Google Drive token for user {user_id}")
                     except Exception as e:
                         logger.error(f"Failed to refresh Google Drive token for user {user_id}: {e}")

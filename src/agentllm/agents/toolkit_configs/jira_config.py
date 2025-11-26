@@ -1,12 +1,43 @@
 """JIRA configuration manager."""
 
 import re
+from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import declarative_base
 
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 from agentllm.tools.jira_toolkit import JiraTools
 
 from .base import BaseToolkitConfig
+
+# Define token model for JIRA
+Base = declarative_base()
+
+
+class JiraToken(Base):
+    """Table for storing Jira API tokens."""
+
+    __tablename__ = "jira_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    token = Column(String, nullable=False)
+    server_url = Column(String, nullable=False)
+    username = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Register JIRA token type with global registry
+get_global_registry().register(
+    "jira",
+    TokenTypeConfig(
+        model=JiraToken,
+        encrypted_fields=["token"],
+    ),
+)
 
 
 class JiraConfig(BaseToolkitConfig):
@@ -85,7 +116,7 @@ class JiraConfig(BaseToolkitConfig):
         """
         # Check database storage first (preferred)
         if self.token_storage:
-            token_data = self.token_storage.get_jira_token(user_id)
+            token_data = self.token_storage.get_token("jira", user_id)
             if token_data:
                 return True
 
@@ -143,7 +174,8 @@ class JiraConfig(BaseToolkitConfig):
 
             # Store the token in database if available, otherwise in memory
             if self.token_storage:
-                self.token_storage.upsert_jira_token(
+                self.token_storage.upsert_token(
+                    "jira",
                     user_id=user_id,
                     token=token,
                     server_url=self._jira_server,
@@ -214,7 +246,7 @@ class JiraConfig(BaseToolkitConfig):
         if self.token_storage:
             # Get credentials from database
             try:
-                token_data = self.token_storage.get_jira_token(user_id)
+                token_data = self.token_storage.get_token("jira", user_id)
                 if not token_data:
                     logger.error(f"No Jira token found in database for user {user_id}")
                     return None

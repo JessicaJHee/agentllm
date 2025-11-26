@@ -5,12 +5,41 @@ The toolkit does not support creating, updating, or modifying customer cases.
 """
 
 import re
+from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import declarative_base
 
+from agentllm.db.token_registry import TokenTypeConfig, get_global_registry
 from agentllm.tools.rhcp_toolkit import RHCPTools
 
 from .base import BaseToolkitConfig
+
+# Define token model for RHCP
+Base = declarative_base()
+
+
+class RHCPToken(Base):
+    """Table for storing Red Hat Customer Portal offline tokens."""
+
+    __tablename__ = "rhcp_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    offline_token = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Register RHCP token type with global registry
+get_global_registry().register(
+    "rhcp",
+    TokenTypeConfig(
+        model=RHCPToken,
+        encrypted_fields=["offline_token"],
+    ),
+)
 
 
 class RHCPConfig(BaseToolkitConfig):
@@ -52,7 +81,7 @@ class RHCPConfig(BaseToolkitConfig):
         """
         # Check database storage first (preferred)
         if self.token_storage:
-            token_data = self.token_storage.get_rhcp_token(user_id)
+            token_data = self.token_storage.get_token("rhcp", user_id)
             if token_data:
                 return True
 
@@ -111,7 +140,8 @@ class RHCPConfig(BaseToolkitConfig):
 
             # Store the token in database if available, otherwise in memory
             if self.token_storage:
-                self.token_storage.upsert_rhcp_token(
+                self.token_storage.upsert_token(
+                    "rhcp",
                     user_id=user_id,
                     offline_token=offline_token,
                 )
@@ -188,7 +218,7 @@ class RHCPConfig(BaseToolkitConfig):
         if self.token_storage:
             # Get credentials from database
             try:
-                token_data = self.token_storage.get_rhcp_token(user_id)
+                token_data = self.token_storage.get_token("rhcp", user_id)
                 if not token_data:
                     logger.error(f"No RHCP offline token found in database for user {user_id}")
                     return None

@@ -140,9 +140,7 @@ class JiraTriagerTools(Toolkit):
 
             # Extract current ticket data
             title = override_title if override_title else getattr(fields, "summary", "")
-            description = override_description if override_description else self._clean_jira_description(
-                getattr(fields, "description", "")
-            )
+            description = override_description if override_description else self._clean_jira_description(getattr(fields, "description", ""))
 
             # Extract current components
             current_components: list[str] = []
@@ -184,11 +182,13 @@ class JiraTriagerTools(Toolkit):
                 missing_fields.append("components")
 
             if not missing_fields:
-                return json.dumps({
-                    "message": f"Ticket {issue_key} already has both team and components assigned",
-                    "team": current_team,
-                    "components": current_components,
-                })
+                return json.dumps(
+                    {
+                        "message": f"Ticket {issue_key} already has both team and components assigned",
+                        "team": current_team,
+                        "components": current_components,
+                    }
+                )
 
             # Return ticket data for agent to analyze using logic-based rules
             ticket_data = {

@@ -96,7 +96,7 @@ nox -s example_rhai_releases -- bc1861ec-afe8-459c-bfb5-8c3ab866aee4
    import sys
    sys.path.insert(0, 'src')
    from agentllm.db.token_storage import TokenStorage
-   ts = TokenStorage(db_file='tmp/agno_sessions.db')
+   ts = TokenStorage(db_file='tmp/agent-data/agno_sessions.db')
    print('Available users:', ts.list_users_with_gdrive_tokens())
    "
    ```
@@ -112,7 +112,7 @@ The script produces beautifully formatted terminal output using the Rich library
 User ID: demo-user
 
 Release sheet: https://docs.google.com/document/d/...
-Token database: tmp/agno_sessions.db
+Token database: tmp/agent-data/agno_sessions.db
 
 🔑 Fetching Google Drive credentials for user: demo-user
 ✅ Google Drive credentials loaded successfully
@@ -225,7 +225,7 @@ When creating new examples:
 3. **Use TokenStorage for credentials:**
    ```python
    from agentllm.db.token_storage import TokenStorage
-   token_storage = TokenStorage(db_file="tmp/agno_sessions.db")
+   token_storage = TokenStorage(db_file="tmp/agent-data/agno_sessions.db")
    credentials = token_storage.get_gdrive_credentials(user_id)
    ```
 

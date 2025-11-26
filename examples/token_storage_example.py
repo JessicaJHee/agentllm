@@ -45,7 +45,8 @@ def example_jira_token_storage():
 
     # Store Jira token for a user
     user_id = "user@example.com"
-    token_storage.upsert_jira_token(
+    token_storage.upsert_token(
+        "jira",
         user_id=user_id,
         token="your_jira_token_here",
         server_url="https://issues.redhat.com",
@@ -53,7 +54,7 @@ def example_jira_token_storage():
     )
 
     # Retrieve token
-    jira_token_data = token_storage.get_jira_token(user_id)
+    jira_token_data = token_storage.get_token("jira", user_id)
     print(f"Retrieved Jira token: {jira_token_data}")
 
     # Get credentials from token storage
@@ -96,17 +97,18 @@ def example_gdrive_token_storage():
 
     # Store Google Drive credentials for a user
     user_id = "user@example.com"
-    token_storage.upsert_gdrive_token(
+    token_storage.upsert_token(
+        "gdrive",
         user_id=user_id,
         credentials=credentials,
     )
 
     # Retrieve credentials
-    retrieved_credentials = token_storage.get_gdrive_credentials(user_id)
+    retrieved_credentials = token_storage.get_token("gdrive", user_id)
     print(f"Retrieved credentials: {retrieved_credentials is not None}")
 
     # Get credentials from token storage
-    credentials = token_storage.get_gdrive_credentials(user_id)
+    credentials = token_storage.get_token("gdrive", user_id)
     if not credentials:
         raise ValueError(f"No Google Drive credentials found for user {user_id}")
 
