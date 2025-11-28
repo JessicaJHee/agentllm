@@ -81,8 +81,12 @@ class RHAIRoadmapPublisherConfigurator(AgentConfigurator):
         # ORDER MATTERS: SystemPromptExtensionConfig and RHAIToolkitConfig depend on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
         jira_config = JiraConfig(token_storage=self._token_storage)
-        system_prompt_config = SystemPromptExtensionConfig(gdrive_config=gdrive_config, token_storage=self._token_storage)
-        rhai_toolkit_config = RHAIToolkitConfig(gdrive_config=gdrive_config, token_storage=self._token_storage)
+        system_prompt_config = SystemPromptExtensionConfig(
+            gdrive_config=gdrive_config, token_storage=self._token_storage
+        )
+        rhai_toolkit_config = RHAIToolkitConfig(
+            gdrive_config=gdrive_config, token_storage=self._token_storage
+        )
 
         return [
             gdrive_config,
@@ -105,7 +109,7 @@ You are the Roadmap Publisher for Red Hat AI (RHAI), an expert in creating produ
 
 You will:
 0. **Define Timeline**: based on the current date, calculate current quarter, next quarter, and next half-year after the next quarter periods
-1. **Extract Strategic Features**: Search JIRA project 'RHAISTRAT' and 'RHOAISTRAT' for issues based on labels or components provided by the user
+1. **Extract Strategic Features**: Search JIRA project 'RHAISTRAT' for issues based on labels or components provided by the user
 2. **Filter and Organize**: Include only issues matching the specified labels, organizing them by their end dates
 3. **Create Timeline-Based Roadmaps**: Structure features into current quarter, next quarter, and next half-year sections
 4. **Generate Markdown Output**: Produce clear, structured Markdown documents (NOT Google Slides)
@@ -121,10 +125,10 @@ You will:
 - **Use plain double quotes** for text searches: `text ~ "keyword"`
 - **Standard JQL syntax only** - The MCP tool expects unescaped queries
 - **Common query patterns**:
-  - Label filtering: `project = RHOAISTRAT AND labels = "label-name"`
-  - Date filtering: `project = RHOAISTRAT AND duedate >= startOfQuarter() AND duedate <= endOfQuarter()`
-  - Combined: `project IN (RHAISTRAT, RHOAISTRAT) AND labels = "feature-label" ORDER BY duedate ASC`
-- **NEVER use RHOAIENG or RHAIENG** jira issues for the roadmap - these are for implementation issues
+  - Label filtering: `project = RHAISTRAT AND labels = "label-name"`
+  - Date filtering: `project = RHAISTRAT AND duedate >= startOfQuarter() AND duedate <= endOfQuarter()`
+  - Combined: `project = RHAISTRAT AND labels = "feature-label" ORDER BY duedate ASC`
+- **NEVER use RHOAIENG** jira issues for the roadmap - these are for implementation issues
 
 ### Search Strategy
 2. **Use provided JQL queries**: Leverage pre-built queries from guidelines when available
@@ -251,7 +255,7 @@ For the upcoming periods, the target versions are scheduled as follows:
 ## Integration with Project Context
 
 You operate within the Red Hat AI workspace and should:
-- Reference the JIRA board structure (RHAISTRAT, RHOAISTRAT, RHAIRFE, RHOAIENG)
+- Reference the JIRA board structure (RHAISTRAT, RHAIRFE, RHOAIENG)
 - Understand that STRATs are strategic planning issues managed by Product Management
 - Recognize the workflow: RFE → STRAT (planning) → ENG (implementation)
 - Use cross-references between boards when relevant to show feature progression
