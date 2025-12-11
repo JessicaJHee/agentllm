@@ -376,7 +376,7 @@ Initiate a real-time data stream with zero-latency updates.
 {
   "stream_id": "str_9a2b5c8d1e4f7g0h3j6k9m2n5p8q1r4s",
   "websocket_url": "wss://stream.quantumflux.example/v3/str_9a2b5c8d1e4f7g0h3j6k9m2n5p8q1r4s",
-  "authentication_token": "st_7d2f6a9c3e8b1g5h4j2k7m0n9p3q6r2s",
+  "authentication_token": "st_7d2f6a9c3e8b1g5h4j2k7m0n9p3q6r2s", // notsecret
   "expires_at": "2024-11-19T18:47:23.470Z",
   "estimated_throughput_mbps": 847.3
 }
@@ -393,7 +393,7 @@ ws.on('open', () => {
   // Send authentication
   ws.send(JSON.stringify({
     type: 'auth',
-    token: 'st_7d2f6a9c3e8b1g5h4j2k7m0n9p3q6r2s'
+    token: 'st_7d2f6a9c3e8b1g5h4j2k7m0n9p3q6r2s' // notsecret
   }));
 });
 
@@ -799,7 +799,7 @@ All errors follow a consistent structure:
 import requests
 import json
 
-API_KEY = "qfx_live_47b89d3c92e1f5a6b8c4d7e9f2a3b5c8d1e4f6a9b2c5d8e1f4a7b0c3d6e9f2a5"
+API_KEY = "qfx_live_47b89d3c92e1f5a6b8c4d7e9f2a3b5c8d1e4f6a9b2c5d8e1f4a7b0c3d6e9f2a5"  # notsecret
 BASE_URL = "https://api.quantumflux.example/v3"
 
 headers = {
@@ -843,7 +843,7 @@ else:
 const WebSocket = require('ws');
 
 const STREAM_ID = 'str_9a2b5c8d1e4f7g0h3j6k9m2n5p8q1r4s';
-const AUTH_TOKEN = 'st_7d2f6a9c3e8b1g5h4j2k7m0n9p3q6r2s';
+const AUTH_TOKEN = 'st_7d2f6a9c3e8b1g5h4j2k7m0n9p3q6r2s'; // notsecret
 const WS_URL = `wss://stream.quantumflux.example/v3/${STREAM_ID}`;
 
 const ws = new WebSocket(WS_URL);

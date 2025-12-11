@@ -1,0 +1,7 @@
+[allowlist]
+  description = "Global Allowlist for AI-generated example data"
+
+  # Ignore AI-generated example API documentation with fake secrets
+  paths = [
+    '''knowledge/demo-agent/quantumflux_api\.md''',
+  ]

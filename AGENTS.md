@@ -536,3 +536,55 @@ AGNO_DEBUG=true pytest tests/
 # Disable AGNO_DEBUG even in verbose mode
 AGNO_DEBUG=false pytest tests/ -v
 ```
+
+## Handling False Positive Leak Detection
+
+When adding example API keys, tokens, or secrets to documentation or knowledge files, you may trigger false positives from secret scanning tools (PwnedAlert, rh-pre-commit, gitleaks).
+
+### Option 1: Allowlist via `.gitleaks.toml` (Recommended)
+
+Add paths to `.gitleaks.toml` in the repository root:
+
+```toml
+[allowlist]
+  description = "Global Allowlist for AI-generated example data"
+
+  paths = [
+    '''knowledge/demo-agent/quantumflux_api\.md''',
+  ]
+```
+
+**Benefits:**
+- Works retroactively on git history
+- PwnedAlert and rh-pre-commit respect this file
+- Clean solution for entire files containing synthetic data
+
+### Option 2: Inline `notsecret` Comments
+
+Add comments to individual lines containing fake secrets:
+
+```python
+API_KEY = "fake_example_key_12345"  # notsecret
+```
+
+```javascript
+const AUTH_TOKEN = 'fake_token_abc123'; // notsecret
+```
+
+```json
+{
+  "api_key": "fake_key_xyz789", // notsecret
+}
+```
+
+**Limitation:** Only works for new commits, not historical ones.
+
+### Best Practice
+
+Use both options together for defense in depth:
+1. `.gitleaks.toml` for broad file-level protection
+2. `# notsecret` comments for inline documentation clarity
+
+**References:**
+- [The Source - Handling False Positives](https://source.redhat.com/departments/it/it-information-security/wiki/pattern_distribution_server#handling-false-positives)
+- [rh-pre-commit hook](https://source.redhat.com/departments/it/it_information_security/leaktk/leaktk_components/rh_pre_commit)
