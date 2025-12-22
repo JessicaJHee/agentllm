@@ -172,6 +172,23 @@ class GoogleDriveConfig(BaseToolkitConfig):
         # Store per-user Google Drive toolkits (in-memory cache)
         self._gdrive_toolkits: dict[str, GoogleDriveTools] = {}
 
+    def is_required(self) -> bool:
+        """Check if Google Drive is required.
+
+        Google Drive is optional when local config file is available for Jira Triager automation.
+        This allows the agent to work with either Google Drive OR local file for configuration.
+
+        Returns:
+            False if local config file is configured for Jira Triager, True otherwise
+        """
+        # If local config file is configured for Jira Triager, Google Drive is optional
+        config_file = os.environ.get("JIRA_TRIAGER_CONFIG_FILE")
+        if config_file:
+            return False  # Optional - local file can be used instead
+
+        # Otherwise, Google Drive is required (default behavior)
+        return True
+
     def is_configured(self, user_id: str) -> bool:
         """Check if Google Drive is configured for user.
 
