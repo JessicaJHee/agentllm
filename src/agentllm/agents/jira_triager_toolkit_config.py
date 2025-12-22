@@ -12,24 +12,41 @@ from agentllm.tools.jira_triager_toolkit import JiraTriagerTools
 class JiraTriagerToolkitConfig(BaseToolkitConfig):
     """Manages Jira Triager toolkit configuration.
 
-    Loads configuration from Google Drive folder (rhdh-teams.json, jira-filter.txt)
+    Loads configuration from local file or Google Drive folder (rhdh-teams.json)
     and creates per-user JiraTriagerTools instances.
 
-    Requires: Jira credentials + Google Drive OAuth + JIRA_TRIAGER_GDRIVE_FOLDER_ID env var.
+    Requires: Jira credentials + (local config file OR Google Drive OAuth) + configuration source env var.
     """
+
+    # Static default JQL filter
+    DEFAULT_JQL_FILTER = (
+        'project in ("Red Hat Internal Developer Platform", "RHDH Support","Red Hat Developer Hub Bugs") '
+        'AND status != closed AND (Team is EMPTY OR component is EMPTY) '
+        'AND issuetype not in (Sub-task, Feature, "Feature Request", Outcome) '
+        'ORDER BY created DESC, priority DESC'
+    )
 
     def __init__(
         self,
         token_storage=None,
         gdrive_folder_id: str | None = None,
+        config_file: str | None = None,
     ):
         """Initialize Jira Triager configuration.
 
         Args:
             token_storage: TokenStorage instance for database-backed credentials
             gdrive_folder_id: Google Drive folder ID containing config files (overrides env var)
+            config_file: Local file path to rhdh-teams.json (default: config/rhdh-teams.json)
         """
         super().__init__(token_storage)
+
+        # Set local file path (highest priority for automation)
+        # Default: config/rhdh-teams.json (from github.com/JessicaJHee/rhdh-jira-triager-knowledge)
+        if config_file is None:
+            config_file = os.getenv("JIRA_TRIAGER_CONFIG_FILE", "config/rhdh-teams.json")
+
+        self._config_file = config_file
 
         # Set default Google Drive folder ID
         if gdrive_folder_id is None:
@@ -37,7 +54,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
 
         self._gdrive_folder_id = gdrive_folder_id
 
-        # Configuration loaded from Google Drive (cached per user)
+        # Configuration loaded from local file or Google Drive (cached per user)
         self._user_configs: dict[str, dict] = {}  # user_id -> config dict
 
         # Store per-user Jira Triager toolkits (in-memory cache)
@@ -46,22 +63,27 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
     def is_configured(self, user_id: str) -> bool:
         """Check if Jira Triager is configured for user.
 
-        Jira Triager is configured if both Jira and Google Drive are configured.
+        Jira Triager is configured if:
+        - Jira is configured AND
+        - (Local config file exists OR Google Drive is configured)
 
         Args:
             user_id: User identifier
 
         Returns:
-            True if user has valid Jira and Google Drive credentials
+            True if user has valid Jira credentials and config source
         """
         if not self.token_storage:
             return False
 
-        # Check if user has both Jira and Google Drive credentials
+        # Check if user has Jira credentials
         has_jira = self.token_storage.get_token("jira", user_id) is not None
+
+        # Check for local file or Google Drive
+        has_local_file = self._config_file is not None
         has_gdrive = self.token_storage.get_token("gdrive", user_id) is not None
 
-        return has_jira and has_gdrive
+        return has_jira and (has_local_file or has_gdrive)
 
     def extract_and_store_config(self, message: str, user_id: str) -> str | None:
         """Extract and store configuration from user message.
@@ -109,11 +131,11 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
         if not self.is_configured(user_id):
             return None
 
-        # Load configuration from Google Drive if not already loaded
+        # Load configuration from local file or Google Drive if not already loaded
         if user_id not in self._user_configs:
-            config = self._load_configuration_from_gdrive(user_id)
+            config = self._load_configuration(user_id)
             if not config:
-                logger.error(f"Failed to load configuration from Google Drive for user {user_id}")
+                logger.error(f"Failed to load configuration for user {user_id}")
                 return None
             self._user_configs[user_id] = config
 
@@ -270,18 +292,77 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
                 instructions.append(json.dumps(config["team_assignee_map"], indent=2))
                 instructions.append("```")
 
-            if "jira_filter" in config:
-                instructions.append("")
-                instructions.append(f"DEFAULT_JQL_FILTER: {config['jira_filter']}")
+        # Add static default filter
+        instructions.append("")
+        instructions.append(f"DEFAULT_JQL_FILTER: {self.DEFAULT_JQL_FILTER}")
 
         return instructions
+
+    def _load_configuration(self, user_id: str) -> dict | None:
+        """Load configuration from local file or Google Drive.
+
+        Priority order: local file > Google Drive
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Configuration dictionary, or None if loading fails
+        """
+        # Try local file first (highest priority for automation)
+        if self._config_file:
+            config = self._load_configuration_from_file(self._config_file)
+            if config:
+                logger.info(f"Loaded configuration from local file: {self._config_file}")
+                return config
+            logger.warning(f"Local file configured but loading failed: {self._config_file}")
+
+        # Fall back to Google Drive
+        if self._gdrive_folder_id:
+            config = self._load_configuration_from_gdrive(user_id)
+            if config:
+                logger.info("Loaded configuration from Google Drive")
+                return config
+
+        logger.error("No configuration source available (local file or Google Drive)")
+        return None
+
+    def _load_configuration_from_file(self, file_path: str) -> dict | None:
+        """Load configuration from local JSON file.
+
+        Args:
+            file_path: Path to rhdh-teams.json
+
+        Returns:
+            Configuration dictionary, or None if loading fails
+        """
+        import json
+        from pathlib import Path
+
+        try:
+            config_path = Path(file_path)
+            if not config_path.exists():
+                logger.error(f"Configuration file not found: {file_path}")
+                return None
+
+            with open(config_path) as f:
+                config = json.load(f)
+
+            logger.info(f"Successfully loaded configuration from {file_path}")
+            return config
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in configuration file {file_path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading configuration from file {file_path}: {e}")
+            return None
 
     def _load_configuration_from_gdrive(self, user_id: str) -> dict | None:
         """Load all configuration from Google Drive folder.
 
         Fetches configuration from the configured Google Drive folder:
         - rhdh-teams.json (consolidated team configuration)
-        - jira-filter.txt (default JQL filter)
 
         The rhdh-teams.json file has the structure:
         {
@@ -369,15 +450,6 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
                 logger.error(f"Error loading rhdh-teams.json: {e}")
                 return None
 
-            # Fetch JQL filter (text file)
-            try:
-                filter_content = self._fetch_file_from_gdrive(user_id, gdrive_toolkit, "jira-filter.txt")
-                if filter_content:
-                    config["jira_filter"] = filter_content.strip()
-                    logger.info("Loaded jira_filter from Google Drive: jira-filter.txt")
-            except Exception as e:
-                logger.error(f"Error loading jira-filter.txt: {e}")
-
             if not config or "team_id_map" not in config:
                 logger.error("No valid configuration loaded from Google Drive")
                 return None
@@ -395,7 +467,7 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
         Args:
             user_id: User identifier
             gdrive_toolkit: Google Drive toolkit instance
-            file_path: Filename in the folder (e.g., "component-team.json", "jira-filter.txt")
+            file_path: Filename in the folder (e.g., "rhdh-teams.json")
 
         Returns:
             File content as string, or None if fetch fails

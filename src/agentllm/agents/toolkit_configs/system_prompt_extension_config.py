@@ -152,9 +152,9 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         """Check if this toolkit configuration is required.
 
         Returns:
-            True - system prompt extension is required when configured
+            False - system prompt extension is optional
         """
-        return True
+        return False  # Optional - agent works fine without extended system prompt
 
     def get_agent_instructions(self, user_id: str) -> list[str]:
         """Get agent instructions by fetching extended system prompt from Google Drive.

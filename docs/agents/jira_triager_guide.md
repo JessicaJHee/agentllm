@@ -1,4 +1,7 @@
-# Jira Triager - User Guide
+# Jira Triager - User Guide (Interactive Mode)
+
+> **Note:** This guide covers interactive chat usage. For automated CI/CD setup, see:
+> - [Automation Guide](jira_triager_automation.md) - GitHub Actions setup and configuration
 
 ## Overview
 
@@ -72,9 +75,8 @@ exist in the Jira project before suggesting them. Invalid components are rejecte
 
 ## Configuration
 
-**Google Drive Folder** (`JIRA_TRIAGER_GDRIVE_FOLDER_ID`):
+**Google Drive Folder** (`JIRA_TRIAGER_GDRIVE_FOLDER_ID`) OR **Local File** (`JIRA_TRIAGER_CONFIG_FILE`):
 - `rhdh-teams.json` - Team config (IDs, components, members)
-- `jira-filter.txt` - Default JQL filter (optional)
 
 **rhdh-teams.json example**:
 ```json

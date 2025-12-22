@@ -26,11 +26,12 @@ class JiraTriager(BaseAgentWrapper):
 
     Required Configuration:
     - Jira: API token (user provides in chat)
-    - Google Drive: OAuth access to config folder and system prompt doc
-    - JIRA_TRIAGER_SYSTEM_PROMPT_GDRIVE_URL: Google Doc with triage guidelines
-    - JIRA_TRIAGER_GDRIVE_FOLDER_ID: Google Drive folder with rhdh-teams.json and jira-filter.txt
+    - Configuration: Local file OR Google Drive
+    - JIRA_TRIAGER_SYSTEM_PROMPT_GDRIVE_URL: Google Doc with triage guidelines (optional)
+    - JIRA_TRIAGER_GDRIVE_FOLDER_ID: Google Drive folder with rhdh-teams.json (for interactive mode)
+    - JIRA_TRIAGER_CONFIG_FILE: Local path to rhdh-teams.json (for automation mode)
 
-    See docs/agents/jira_triager_guide.md for setup instructions.
+    See docs/agents/jira_triager_automation.md for setup instructions.
     """
 
     def __init__(

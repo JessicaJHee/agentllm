@@ -78,8 +78,12 @@ class JiraTriagerConfigurator(AgentConfigurator):
         Returns:
             list[BaseToolkitConfig]: List of toolkit configs
         """
-        # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
-        gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
+        import os
+
+        # Check if we're in automation mode (local config file is set)
+        is_automation_mode = bool(os.getenv("JIRA_TRIAGER_CONFIG_FILE"))
+
+        # Core configs (always required)
         jira_config = JiraConfig(
             token_storage=self._token_storage,
             update_issue=True,
@@ -87,18 +91,22 @@ class JiraTriagerConfigurator(AgentConfigurator):
         jira_triager_toolkit = JiraTriagerToolkitConfig(
             token_storage=self._token_storage,
         )
-        system_prompt_config = SystemPromptExtensionConfig(
-            gdrive_config=gdrive_config,
-            env_var_name="JIRA_TRIAGER_SYSTEM_PROMPT_GDRIVE_URL",
-            token_storage=self._token_storage,
-        )
 
-        return [
-            gdrive_config,
-            jira_config,
-            jira_triager_toolkit,
-            system_prompt_config,  # Must come after gdrive_config due to dependency
-        ]
+        configs = [jira_config, jira_triager_toolkit]
+
+        # Google Drive and system prompt extension (optional in automation mode)
+        if not is_automation_mode:
+            # Interactive mode: include Google Drive and system prompt extension
+            gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
+            system_prompt_config = SystemPromptExtensionConfig(
+                gdrive_config=gdrive_config,
+                env_var_name="JIRA_TRIAGER_SYSTEM_PROMPT_GDRIVE_URL",
+                token_storage=self._token_storage,
+            )
+            # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
+            configs = [gdrive_config, jira_config, jira_triager_toolkit, system_prompt_config]
+
+        return configs
 
     def _build_agent_instructions(self) -> list[str]:
         """Build system prompt instructions for Jira Triager.
@@ -112,10 +120,10 @@ class JiraTriagerConfigurator(AgentConfigurator):
             "",
             "CONFIGURATION SOURCES:",
             "1. Triage guidelines (this prompt) - From Google Doc system prompt",
-            "2. Team configuration (COMPONENT_TEAM_MAP, TEAM_ID_MAP, etc.) - From Google Drive folder file 'rhdh-teams.json'",
-            "3. Default JQL filter - From Google Drive folder file 'jira-filter.txt'",
+            "2. Team configuration (COMPONENT_TEAM_MAP, TEAM_ID_MAP, etc.) - From local file or Google Drive (rhdh-teams.json)",
+            "3. Default JQL filter - Static filter defined in code",
             "",
-            "Note: The team configuration maps and default filter are loaded from Google Drive folder files,",
+            "Note: The team configuration maps are loaded from local file or Google Drive,",
             "NOT from this system prompt. They are injected into your instructions at runtime.",
             "",
             "TRIAGE METHOD:",
