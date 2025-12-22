@@ -1,0 +1,218 @@
+name: Jira Auto-Triage
+
+on:
+  # Scheduled runs every 4 hours on weekdays (DISABLED FOR TESTING)
+  # schedule:
+  #   - cron: "0 */4 * * 1-5"  # Every 4 hours, Monday-Friday
+
+  # Manual trigger with custom options
+  workflow_dispatch:
+    inputs:
+      jql_filter:
+        description: "Custom JQL filter (optional)"
+        required: false
+        type: string
+      confidence_threshold:
+        description: "Confidence threshold (0-100)"
+        required: false
+        default: "80"
+        type: string
+      dry_run:
+        description: "Dry-run mode (preview only)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen
+
+      - name: Checkout configuration repository
+        uses: actions/checkout@v4
+        with:
+          repository: JessicaJHee/rhdh-jira-triager-knowledge
+          token: ${{ secrets.GH_PRIVATE_REPO_TOKEN }}
+          path: config
+
+      - name: Setup ephemeral database from secrets
+        env:
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          uv run python scripts/setup_database_from_secrets.py
+
+      - name: Run auto-triage (dry-run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -n "${{ github.event.inputs.jql_filter }}" ]; then
+            uv run python scripts/auto_triage.py --dry-run --jql "${{ github.event.inputs.jql_filter }}" --json-output > results.json
+          else
+            uv run python scripts/auto_triage.py --dry-run --json-output > results.json
+          fi
+
+      - name: Run auto-triage (apply)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          CONFIDENCE="${{ github.event.inputs.confidence_threshold || '80' }}"
+          if [ -n "${{ github.event.inputs.jql_filter }}" ]; then
+            uv run python scripts/auto_triage.py --apply --confidence "$CONFIDENCE" --jql "${{ github.event.inputs.jql_filter }}" --json-output > results.json || EXIT_CODE=$?
+          else
+            uv run python scripts/auto_triage.py --apply --confidence "$CONFIDENCE" --json-output > results.json || EXIT_CODE=$?
+          fi
+
+          # Allow exit code 2 (manual review required) to continue
+          if [ "${EXIT_CODE:-0}" -eq 2 ]; then
+            echo "Manual review required (exit code 2)"
+            exit 0
+          elif [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "Triage failed (exit code $EXIT_CODE)"
+            exit "$EXIT_CODE"
+          fi
+
+      - name: Parse results
+        id: parse
+        run: |
+          # Extract metrics from JSON
+          TOTAL=$(jq -r '.total // 0' results.json)
+          AUTO_APPLY=$(jq -r '.auto_apply // 0' results.json)
+          APPLIED=$(jq -r '.applied // 0' results.json)
+          FAILED=$(jq -r '.failed // 0' results.json)
+          MANUAL_REVIEW=$(jq -r '.manual_review // 0' results.json)
+
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "auto_apply=$AUTO_APPLY" >> $GITHUB_OUTPUT
+          echo "applied=$APPLIED" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "manual_review=$MANUAL_REVIEW" >> $GITHUB_OUTPUT
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # Skip if no Slack webhook configured
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "Slack webhook not configured, skipping notification"
+            exit 0
+          fi
+
+          # Determine status emoji
+          if [ "${{ steps.parse.outputs.failed }}" -gt 0 ]; then
+            STATUS="❌"
+            COLOR="#ff0000"
+          elif [ "${{ steps.parse.outputs.manual_review }}" -gt 0 ]; then
+            STATUS="⚠️"
+            COLOR="#ff9900"
+          else
+            STATUS="✅"
+            COLOR="#00ff00"
+          fi
+
+          # Build failed items list (first 5)
+          FAILED_ITEMS=$(jq -r '.failed_items[:5] | map("• \(.ticket) - \(.field): \(.recommended)") | join("\n")' results.json)
+          if [ -z "$FAILED_ITEMS" ]; then
+            FAILED_ITEMS="None"
+          fi
+
+          # Build manual review list (first 5)
+          MANUAL_ITEMS=$(jq -r '.manual_review_items[:5] | map("• \(.ticket) - \(.field): \(.recommended) (\(.confidence)%)") | join("\n")' results.json)
+          if [ -z "$MANUAL_ITEMS" ]; then
+            MANUAL_ITEMS="None"
+          fi
+
+          # Send Slack message
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                  "type": "plain_text",
+                  "text": "$STATUS Jira Auto-Triage Results"
+                }
+              },
+              {
+                "type": "section",
+                "fields": [
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Total Recommendations:*\n${{ steps.parse.outputs.total }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Auto-Applied:*\n${{ steps.parse.outputs.auto_apply }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Applied Successfully:*\n${{ steps.parse.outputs.applied }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Failed:*\n${{ steps.parse.outputs.failed }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Manual Review:*\n${{ steps.parse.outputs.manual_review }}"
+                  }
+                ]
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Failed Updates:*\n$FAILED_ITEMS"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Manual Review Required:*\n$MANUAL_ITEMS"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow Run>"
+                }
+              }
+            ]
+          }
+          EOF
+
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-results-${{ github.run_number }}
+          path: results.json
+          retention-days: 30
+
+      - name: Fail on errors
+        if: steps.parse.outputs.failed > 0
+        run: |
+          echo "Triage completed with ${{ steps.parse.outputs.failed }} failures"
+          exit 1
