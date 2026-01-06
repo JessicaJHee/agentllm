@@ -691,7 +691,7 @@ get_issues_by_team(
 - Default query handles Feature Freeze automatically
 - Override parameter enables custom filtering for Code Freeze (or other milestones)
 - Queries live in the prompt (Google Doc), not code - easy to iterate
-- Jasper can adjust the status filter without needing code changes
+- Release managers can adjust the status filter without needing code changes
 
 ## Best Practices
 
