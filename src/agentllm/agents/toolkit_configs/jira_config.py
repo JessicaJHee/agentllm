@@ -56,7 +56,7 @@ class JiraConfig(BaseToolkitConfig):
     def __init__(
         self,
         jira_server: str = "https://issues.redhat.com",
-        default_project_filter: str = "",
+        default_base_jql: str = "",
         token_storage=None,
         # Tool enablement flags (defaults: all read tools enabled, write tools disabled)
         get_issue: bool = True,
@@ -75,8 +75,8 @@ class JiraConfig(BaseToolkitConfig):
 
         Args:
             jira_server: JIRA server URL
-            default_project_filter: Default JQL project filter (e.g., "project IN (FOO, BAR)")
-                Applied to queries that need project scoping. Empty string means no filter.
+            default_base_jql: Default JQL base query (e.g., "project IN (FOO) AND status != closed")
+                Applied to queries that need base scoping. Empty string means no filter.
             token_storage: TokenStorage instance for database-backed credentials
             get_issue: Enable get_issue tool (default: True)
             get_issues_detailed: Enable get_issues_detailed tool (default: True)
@@ -92,7 +92,7 @@ class JiraConfig(BaseToolkitConfig):
         """
         super().__init__(token_storage)
         self._jira_server = jira_server
-        self._default_project_filter = default_project_filter
+        self._default_base_jql = default_base_jql
 
         # Store tool configuration
         self._tool_config = {
@@ -128,7 +128,10 @@ class JiraConfig(BaseToolkitConfig):
                 return True
 
         # Fall back to legacy in-memory storage
-        if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
+        if (
+            user_id in self._user_configs
+            and "jira_token" in self._user_configs[user_id]
+        ):
             return True
 
         return False
@@ -167,7 +170,7 @@ class JiraConfig(BaseToolkitConfig):
             toolkit = JiraTools(
                 token=token,
                 server_url=self._jira_server,
-                default_project_filter=self._default_project_filter,
+                default_base_jql=self._default_base_jql,
                 **self._tool_config,
             )
 
@@ -175,7 +178,9 @@ class JiraConfig(BaseToolkitConfig):
             success, validation_message = toolkit.validate_connection()
 
             if not success:
-                logger.error(f"Jira token validation failed for user {user_id}: {validation_message}")
+                logger.error(
+                    f"Jira token validation failed for user {user_id}: {validation_message}"
+                )
                 raise ValueError(f"Invalid Jira token: {validation_message}")
 
             logger.info(f"Jira token validated successfully for user {user_id}")
@@ -200,9 +205,7 @@ class JiraConfig(BaseToolkitConfig):
             self._jira_toolkits[user_id] = toolkit
 
             # Return confirmation with validation message
-            return (
-                f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
-            )
+            return f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
 
         except Exception as e:
             logger.error(f"Failed to validate Jira token for user {user_id}: {e}")
@@ -263,7 +266,7 @@ class JiraConfig(BaseToolkitConfig):
                     token=token_data["token"],
                     server_url=token_data["server_url"],
                     username=token_data.get("username"),
-                    default_project_filter=self._default_project_filter,
+                    default_base_jql=self._default_base_jql,
                     **self._tool_config,
                 )
                 logger.info(f"Recreated JIRA toolkit from database for user {user_id}")
@@ -272,12 +275,15 @@ class JiraConfig(BaseToolkitConfig):
                 return None
         else:
             # Use legacy in-memory authentication
-            if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
+            if (
+                user_id in self._user_configs
+                and "jira_token" in self._user_configs[user_id]
+            ):
                 token = self._user_configs[user_id]["jira_token"]
                 toolkit = JiraTools(
                     token=token,
                     server_url=self._jira_server,
-                    default_project_filter=self._default_project_filter,
+                    default_base_jql=self._default_base_jql,
                     **self._tool_config,
                 )
                 logger.info(f"Recreated JIRA toolkit (legacy) for user {user_id}")

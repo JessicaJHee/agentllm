@@ -43,6 +43,7 @@ class ReleaseManager(BaseAgentWrapper):
         session_id: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        system_prompt_local_file: str | None = None,
         **model_kwargs,
     ):
         """Initialize the Release Manager with configurator pattern.
@@ -54,10 +55,15 @@ class ReleaseManager(BaseAgentWrapper):
             session_id: Session identifier (optional)
             temperature: Model temperature (0.0-2.0)
             max_tokens: Maximum tokens in response
+            system_prompt_local_file: Optional local file path for system prompt.
+                                      If provided, reads from file instead of Google Drive.
+                                      Useful for testing without OAuth.
             **model_kwargs: Additional model parameters
         """
         # Store token_storage for configurator
         self._token_storage = token_storage
+        # Store local file path for system prompt extension
+        self._system_prompt_local_file = system_prompt_local_file
 
         # Call parent constructor (will call _create_configurator)
         super().__init__(
@@ -92,6 +98,7 @@ class ReleaseManager(BaseAgentWrapper):
             session_id=session_id,
             shared_db=shared_db,
             token_storage=self._token_storage,
+            system_prompt_local_file=self._system_prompt_local_file,
             **kwargs,
         )
 

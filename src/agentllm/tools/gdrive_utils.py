@@ -250,6 +250,11 @@ class GoogleDriveExporter:
         """
         # If it looks like a URL
         if url_or_id.startswith(("http://", "https://")):
+            # Strip fragment identifier (everything after #) as it doesn't affect document ID
+            # Example: https://...?gid=123#gid=123 -> https://...?gid=123
+            url_clean = url_or_id.split("#")[0]
+            logger.debug(f"Extracting ID from URL: {url_clean}")
+
             # Match various Google Drive URL patterns (including tab parameters)
             patterns = [
                 r"/document/d/([a-zA-Z0-9-_]+)",
@@ -263,21 +268,36 @@ class GoogleDriveExporter:
             ]
 
             for pattern in patterns:
-                match = re.search(pattern, url_or_id)
+                match = re.search(pattern, url_clean)
                 if match:
-                    return match.group(1)
+                    extracted_id = match.group(1)
+                    logger.debug(f"✅ Extracted document ID: {extracted_id}")
+                    return extracted_id
 
             # Try parsing as URL
-            parsed = urlparse(url_or_id)
+            parsed = urlparse(url_clean)
             if parsed.query:
                 params = parse_qs(parsed.query)
                 if "id" in params:
-                    return params["id"][0]
+                    extracted_id = params["id"][0]
+                    logger.debug(f"✅ Extracted document ID from query param: {extracted_id}")
+                    return extracted_id
 
+            logger.error(f"❌ Failed to extract ID from URL: {url_or_id}")
+            logger.error("URL must be in one of these formats:")
+            logger.error("  - https://docs.google.com/document/d/DOCUMENT_ID/...")
+            logger.error("  - https://docs.google.com/spreadsheets/d/DOCUMENT_ID/...")
+            logger.error("  - https://docs.google.com/presentation/d/DOCUMENT_ID/...")
+            logger.error("  - https://drive.google.com/open?id=DOCUMENT_ID")
             raise ValueError(f"Could not extract document ID from URL: {url_or_id}")
 
-        # Assume it's already a document ID
-        return url_or_id
+        # Assume it's already a document ID - validate format
+        if re.match(r"^[a-zA-Z0-9-_]+$", url_or_id):
+            logger.debug(f"✅ Using provided document ID: {url_or_id}")
+            return url_or_id
+        else:
+            logger.error(f"❌ Invalid document ID format: {url_or_id}")
+            raise ValueError(f"Invalid document ID format. Must contain only alphanumeric characters, hyphens, and underscores: {url_or_id}")
 
     def detect_document_type(self, url_or_id: str) -> DocumentType:
         """Detect the type of Google Drive document from URL.

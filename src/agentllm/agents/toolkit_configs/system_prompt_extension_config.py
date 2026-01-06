@@ -36,6 +36,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         gdrive_config: "GoogleDriveConfig",
         document_url: str | None = None,
         env_var_name: str | None = None,
+        local_file_path: str | None = None,
         token_storage: "TokenStorage | None" = None,
     ):
         """Initialize system prompt extension configuration.
@@ -46,12 +47,17 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
                          If None, will check env_var_name environment variable.
             env_var_name: Environment variable name to read document URL from.
                          Required if document_url is None.
+            local_file_path: Local file path to read system prompt from.
+                            If provided, takes precedence over Google Drive.
+                            Useful for testing without OAuth.
             token_storage: Optional shared token storage (for consistency with base class)
         """
         super().__init__(token_storage)
         self._gdrive_config = gdrive_config
+        self._local_file_path = local_file_path
 
         # Determine document URL from: parameter > env var
+        # (local_file_path is handled separately in get_agent_instructions)
         if document_url:
             self._doc_url = document_url
             self._source = "constructor parameter"
@@ -74,8 +80,9 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         """Check if system prompt extension is fully configured for a user.
 
         Returns True if:
+        - A local file path is provided (no GDrive needed), OR
         - A document URL is available (from constructor or environment), AND
-        - Google Drive is configured for this user
+          Google Drive is configured for this user
 
         Args:
             user_id: User identifier
@@ -83,6 +90,10 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         Returns:
             True if configured, False otherwise
         """
+        # Local file path takes precedence - no GDrive needed
+        if self._local_file_path:
+            return True
+
         # If no document URL, extension is not configured
         if not self._doc_url:
             return False
@@ -157,11 +168,12 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         return True
 
     def get_agent_instructions(self, user_id: str) -> list[str]:
-        """Get agent instructions by fetching extended system prompt from Google Drive.
+        """Get agent instructions by fetching extended system prompt.
 
         This is the core method that provides the extended system prompt to the agent.
 
         Behavior:
+        - If local file path is set: read from local file (no GDrive needed)
         - If env var not set: return empty list (silent)
         - If GDrive not configured: return empty list (silent, GDrive will handle prompting)
         - If GDrive configured: fetch prompt (failures propagate to fail agent creation)
@@ -176,6 +188,28 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
             ValueError: If prompt fetch fails (will fail agent creation)
             Exception: Any other errors during fetch (will fail agent creation)
         """
+        # Local file path takes precedence - read directly without GDrive
+        if self._local_file_path:
+            try:
+                extended_prompt = self._read_local_file(user_id)
+                logger.info(f"Successfully read extended system prompt from local file for user {user_id}")
+
+                instructions = [
+                    "",
+                    "=== EXTENDED SYSTEM PROMPT (from local file) ===",
+                    f"Source: {self._local_file_path}",
+                    "",
+                    "Extended instructions below:",
+                    "---",
+                    "",
+                    extended_prompt,
+                ]
+
+                return instructions
+            except Exception as e:
+                logger.error(f"Failed to read extended system prompt from local file for user {user_id}: {e}")
+                raise
+
         # If no document URL configured, nothing to do
         if not self._doc_url:
             logger.debug(f"System prompt extension skipped (no document URL from {self._source})")
@@ -268,6 +302,49 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         except Exception as e:
             logger.error(f"Error fetching extended system prompt from {self._doc_url}: {e}")
             raise ValueError(f"Failed to fetch extended system prompt from {self._doc_url}. Error: {str(e)}") from e
+
+    def _read_local_file(self, user_id: str) -> str:
+        """Read extended system prompt from a local file.
+
+        Implements caching: reads once per user and caches the result.
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Extended system prompt content
+
+        Raises:
+            ValueError: If local file path is not set or file cannot be read
+        """
+        # Check cache first
+        if user_id in self._system_prompts:
+            logger.debug(f"Using cached system prompt from local file for user {user_id}")
+            return self._system_prompts[user_id]
+
+        if not self._local_file_path:
+            raise ValueError("Local file path not configured")
+
+        logger.info(f"Reading extended system prompt from {self._local_file_path} for user {user_id}")
+
+        try:
+            with open(self._local_file_path, encoding="utf-8") as f:
+                content = f.read()
+
+            if not content:
+                raise ValueError(f"Local file {self._local_file_path} is empty")
+
+            # Cache the content for this user
+            self._system_prompts[user_id] = content
+            logger.info(f"Successfully read and cached system prompt for user {user_id} ({len(content)} characters)")
+
+            return content
+
+        except FileNotFoundError:
+            raise ValueError(f"Local file not found: {self._local_file_path}") from None
+        except Exception as e:
+            logger.error(f"Error reading extended system prompt from {self._local_file_path}: {e}")
+            raise ValueError(f"Failed to read extended system prompt from {self._local_file_path}. Error: {str(e)}") from e
 
     def invalidate_for_gdrive_change(self, user_id: str) -> None:
         """Invalidate cached system prompt when Google Drive credentials change.

@@ -100,7 +100,7 @@ class JiraTools(Toolkit):
         token: str,
         server_url: str,
         username: str | None = None,
-        default_project_filter: str = "",
+        default_base_jql: str = "",
         get_issue: bool = True,
         get_issues_detailed: bool = True,
         get_issues_stats: bool = True,
@@ -120,8 +120,8 @@ class JiraTools(Toolkit):
             token: Jira personal access token
             server_url: Jira server URL
             username: Optional username for basic auth
-            default_project_filter: Default JQL project filter (e.g., "project IN (FOO, BAR)")
-                Applied to queries that need project scoping. Empty string means no filter.
+            default_base_jql: Default JQL base query (e.g., "project IN (FOO) AND status != closed")
+                Applied to queries that need base scoping. Empty string means no filter.
             get_issue: Include get_issue tool (default: True)
             get_issues_detailed: Include get_issues_detailed tool (default: True)
             get_issues_stats: Include get_issues_stats tool (default: True)
@@ -138,7 +138,7 @@ class JiraTools(Toolkit):
         self._token = token
         self._server_url = server_url
         self._username = username
-        self._default_project_filter = default_project_filter
+        self._default_base_jql = default_base_jql
 
         self._jira_client: JIRA | None = None
 
@@ -977,6 +977,7 @@ class JiraTools(Toolkit):
         self,
         release_version: str,
         team_ids: list[str],
+        base_jql: str | None = None,
     ) -> str:
         """Get accurate issue counts by team for a release without pagination issues.
 
@@ -987,6 +988,8 @@ class JiraTools(Toolkit):
         Args:
             release_version: Release version (e.g., "1.9.0")
             team_ids: List of team IDs to query (e.g., ["4267", "4564", "5775"])
+            base_jql: Optional base JQL query to override default.
+                      If None, uses default_base_jql from config.
 
         Returns:
             JSON string with team breakdown:
@@ -999,12 +1002,19 @@ class JiraTools(Toolkit):
                     "5775": 63
                 },
                 "without_team": 326,
-                "query_base": "project IN (...) AND fixVersion = \"1.9.0\" AND status != closed"
+                "query_base": "project IN (...) AND fixVersion = \"1.9.0\""
             }
 
         Example:
-            # Get team IDs from team mapping, then get accurate counts
-            result = get_issues_by_team("1.9.0", ["4267", "4564", "5775"])
+            # Use default base query
+            get_issues_by_team("1.9.0", ["4267", "4564"])
+
+            # Override for code freeze
+            get_issues_by_team(
+                "1.9.0",
+                ["4267", "4564"],
+                base_jql="project IN (...) AND status NOT IN (closed, verified)"
+            )
         """
         try:
             logger.debug(f"Getting issue counts by team for release {release_version}")
@@ -1012,13 +1022,17 @@ class JiraTools(Toolkit):
 
             jira = self._get_jira_client()
 
-            # Build base JQL query with optional project filter
+            # Build base JQL query
             jql_parts = []
-            if self._default_project_filter:
-                jql_parts.append(self._default_project_filter)
+
+            # Use override if provided, else use default
+            effective_base_jql = base_jql if base_jql is not None else self._default_base_jql
+            if effective_base_jql:
+                jql_parts.append(effective_base_jql)
+                logger.debug(f"Using base JQL: {effective_base_jql}")
+
             jql_parts.append(f'fixVersion = "{release_version}"')
-            jql_parts.append("status != closed")
-            base_jql = " AND ".join(jql_parts)
+            base_jql_query = " AND ".join(jql_parts)
 
             # Get total count for the release
             logger.debug(f"Getting total count for release {release_version}")
@@ -1026,8 +1040,8 @@ class JiraTools(Toolkit):
 
             # CRITICAL: Use json_result=True to avoid fetching all issues!
             # When json_result=False (default), the library ignores maxResults=0 and fetches ALL issues
-            logger.info(f"Querying Jira for total count: {base_jql[:100]}...")
-            total_result = jira.search_issues(base_jql, maxResults=0, json_result=True)
+            logger.info(f"Querying Jira for total count: {base_jql_query[:100]}...")
+            total_result = jira.search_issues(base_jql_query, maxResults=0, json_result=True)
 
             elapsed = time.time() - start_time
             total_count = total_result.get("total", 0)
@@ -1039,7 +1053,7 @@ class JiraTools(Toolkit):
             def query_team_count(team_id: str) -> tuple[str, int]:
                 """Query count for a single team (used in parallel execution)."""
                 try:
-                    team_jql = f"{base_jql} AND team = {team_id}"
+                    team_jql = f"{base_jql_query} AND team = {team_id}"
 
                     # Query Jira for team count (use json_result=True to avoid fetching all issues)
                     logger.info(f"Querying team {team_id}: {team_jql[:100]}...")
@@ -1079,7 +1093,7 @@ class JiraTools(Toolkit):
                 "total_issues": total_count,
                 "by_team": team_counts,
                 "without_team": without_team,
-                "query_base": base_jql,
+                "query_base": base_jql_query,
             }
 
             logger.info(
