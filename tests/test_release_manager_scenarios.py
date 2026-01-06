@@ -114,6 +114,15 @@ TEST_SCENARIOS = [
         "validation_type": "count_accuracy",
         "jql_query": 'issuetype = Feature AND fixVersion = "1.9.0" AND labels = demo',
     },
+    {
+        "id": 8,
+        "category": "Feature Freeze Announcement",
+        "question": "Create a Feature Freeze Update announcement for release 1.9",
+        "expected_keywords": ["feature freeze", "1.9"],
+        "should_cite_source": True,
+        "knowledge_type": "multi",
+        "description": "Tests ability to generate feature freeze announcements using local system prompt template. Validates that the agent can access release context from the local file and query Jira for relevant data.",
+    },
 ]
 
 
@@ -183,12 +192,14 @@ def configured_agent(shared_db, token_storage, configured_user_id):
     and creates an actual Agno agent using _get_or_create_agent().
 
     The agent is fully configured and ready to make real API calls.
+    Uses local system prompt file to avoid requiring Google Drive OAuth for the prompt.
     """
-    # Create the ReleaseManager wrapper
+    # Create the ReleaseManager wrapper with local system prompt file
     agent_wrapper = ReleaseManager(
         shared_db=shared_db,
         token_storage=token_storage,
         user_id=configured_user_id,
+        system_prompt_local_file="docs/templates/release_manager_system_prompt.md",
     )
 
     # Force creation of the underlying Agno agent
