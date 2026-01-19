@@ -121,7 +121,13 @@ class JiraConfig(BaseToolkitConfig):
         Returns:
             True if user has a valid JIRA token
         """
-        # Check database storage first (preferred)
+        import os
+
+        # Check environment variable first (automation mode)
+        if os.getenv("JIRA_API_TOKEN"):
+            return True
+
+        # Check database storage (interactive mode)
         if self.token_storage:
             token_data = self.token_storage.get_token("jira", user_id)
             if token_data:
@@ -244,9 +250,25 @@ class JiraConfig(BaseToolkitConfig):
         Returns:
             JiraTools instance if configured, None otherwise
         """
+        import os
+
         # Return cached toolkit if available
         if user_id in self._jira_toolkits:
             return self._jira_toolkits[user_id]
+
+        # Fallback: Check for JIRA_API_TOKEN environment variable (automation mode)
+        env_token = os.getenv("JIRA_API_TOKEN")
+        if env_token:
+            logger.info(f"Using JIRA_API_TOKEN from environment for user {user_id}")
+            toolkit = JiraTools(
+                token=env_token,
+                server_url=self._jira_server,
+                default_base_jql=self._default_base_jql,
+                **self._tool_config,
+            )
+            # Cache it
+            self._jira_toolkits[user_id] = toolkit
+            return toolkit
 
         # If we have token but no toolkit (e.g., after restart), recreate it
         if not self.is_configured(user_id):

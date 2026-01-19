@@ -72,14 +72,27 @@ class JiraTriagerConfigurator(AgentConfigurator):
         """
         return "An AI agent that recommends team and component assignments for Jira tickets"
 
+    def _get_knowledge_config(self) -> dict[str, Any] | None:
+        """Knowledge base configuration for Jira Triager.
+
+        Returns:
+            None - Knowledge base disabled for Jira Triager
+        """
+        # Knowledge base disabled - using component mapping and semantic inference instead
+        return None
+
     def _initialize_toolkit_configs(self) -> list[BaseToolkitConfig]:
         """Initialize toolkit configurations for Jira Triager.
 
         Returns:
             list[BaseToolkitConfig]: List of toolkit configs
         """
-        # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
-        gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
+        import os
+
+        # Check if we're in automation mode (local config file is set)
+        is_automation_mode = bool(os.getenv("JIRA_TRIAGER_CONFIG_FILE"))
+
+        # Core configs (always required)
         jira_config = JiraConfig(
             token_storage=self._token_storage,
             update_issue=True,
@@ -87,18 +100,22 @@ class JiraTriagerConfigurator(AgentConfigurator):
         jira_triager_toolkit = JiraTriagerToolkitConfig(
             token_storage=self._token_storage,
         )
-        system_prompt_config = SystemPromptExtensionConfig(
-            gdrive_config=gdrive_config,
-            env_var_name="JIRA_TRIAGER_SYSTEM_PROMPT_GDRIVE_URL",
-            token_storage=self._token_storage,
-        )
 
-        return [
-            gdrive_config,
-            jira_config,
-            jira_triager_toolkit,
-            system_prompt_config,  # Must come after gdrive_config due to dependency
-        ]
+        configs = [jira_config, jira_triager_toolkit]
+
+        # Google Drive and system prompt extension (optional in automation mode)
+        if not is_automation_mode:
+            # Interactive mode: include Google Drive and system prompt extension
+            gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
+            system_prompt_config = SystemPromptExtensionConfig(
+                gdrive_config=gdrive_config,
+                env_var_name="JIRA_TRIAGER_SYSTEM_PROMPT_GDRIVE_URL",
+                token_storage=self._token_storage,
+            )
+            # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
+            configs = [gdrive_config, jira_config, jira_triager_toolkit, system_prompt_config]
+
+        return configs
 
     def _build_agent_instructions(self) -> list[str]:
         """Build system prompt instructions for Jira Triager.

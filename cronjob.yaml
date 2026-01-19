@@ -1,0 +1,130 @@
+---
+# Kubernetes Secret for Jira Triager credentials
+# Replace the base64-encoded values with your actual credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jira-triager-secrets
+  namespace: agentllm
+type: Opaque
+data:
+  # Base64-encoded values (use: echo -n "your-value" | base64)
+  jira-api-token: YOUR_BASE64_ENCODED_JIRA_TOKEN
+  gemini-api-key: YOUR_BASE64_ENCODED_GEMINI_KEY
+  slack-webhook-url: YOUR_BASE64_ENCODED_SLACK_WEBHOOK  # Optional
+
+---
+# ConfigMap for rhdh-teams.json configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jira-triager-config
+  namespace: agentllm
+data:
+  rhdh-teams.json: |
+    {
+      "RHDH - Plugins": {
+        "id": "12345678",
+        "components": ["Catalog", "Scaffolder", "TechDocs"],
+        "members": ["user1@redhat.com", "user2@redhat.com"]
+      },
+      "RHDH - Security": {
+        "id": "12345679",
+        "components": ["RBAC", "Keycloak Provider"],
+        "members": ["security1@redhat.com"]
+      }
+    }
+
+---
+# CronJob for automated Jira triage
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jira-auto-triage
+  namespace: agentllm
+  labels:
+    app: jira-triager
+spec:
+  # Schedule: Weekdays at 11am UTC (6am EST)
+  schedule: "0 11 * * 1-5"
+
+  # Job history limits
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  # Prevent concurrent runs
+  concurrencyPolicy: Forbid
+
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: jira-triager
+        spec:
+          containers:
+          - name: triage
+            image: codeberg.org/b4mad/agentllm/agentllm:latest
+            imagePullPolicy: Always
+            command: ["/bin/bash", "/app/scripts/run_triage.sh"]
+
+            env:
+            # Required credentials from Secret
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jira-triager-secrets
+                  key: jira-api-token
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jira-triager-secrets
+                  key: gemini-api-key
+
+            # Optional Slack webhook from Secret
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: jira-triager-secrets
+                  key: slack-webhook-url
+                  optional: true
+
+            # Configuration
+            - name: JIRA_TRIAGER_CONFIG_FILE
+              value: "/config/rhdh-teams.json"
+            - name: JIRA_SERVER_URL
+              value: "https://issues.redhat.com"
+
+            # Triage mode
+            - name: DRY_RUN
+              value: "false"  # Set to "true" for testing
+
+            # Logging
+            - name: LOGURU_LEVEL
+              value: "INFO"
+            - name: AGNO_DEBUG
+              value: "false"
+
+            # Optional: Custom JQL filter
+            # - name: JQL_FILTER
+            #   value: "project=RHIDP AND status='To Do' LIMIT 5"
+
+            volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+
+          volumes:
+          - name: config
+            configMap:
+              name: jira-triager-config
+
+          restartPolicy: OnFailure
