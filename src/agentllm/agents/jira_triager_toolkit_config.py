@@ -12,56 +12,88 @@ from agentllm.tools.jira_triager_toolkit import JiraTriagerTools
 class JiraTriagerToolkitConfig(BaseToolkitConfig):
     """Manages Jira Triager toolkit configuration.
 
-    Loads configuration from Google Drive folder (rhdh-teams.json, jira-filter.txt)
-    and creates per-user JiraTriagerTools instances.
+    Loads configuration from:
+    - Local file (JIRA_TRIAGER_CONFIG_FILE env var or local_config_file parameter), OR
+    - Google Drive folder (rhdh-teams.json, jira-filter.txt)
 
-    Requires: Jira credentials + Google Drive OAuth + JIRA_TRIAGER_GDRIVE_FOLDER_ID env var.
+    Requires:
+    - Jira credentials (always)
+    - Local config file OR Google Drive OAuth
     """
 
     def __init__(
         self,
         token_storage=None,
         gdrive_folder_id: str | None = None,
+        local_config_file: str | None = None,
     ):
         """Initialize Jira Triager configuration.
 
         Args:
             token_storage: TokenStorage instance for database-backed credentials
             gdrive_folder_id: Google Drive folder ID containing config files (overrides env var)
+            local_config_file: Local file path to rhdh-teams.json (for automation mode)
         """
         super().__init__(token_storage)
 
-        # Set default Google Drive folder ID
+        # Check for local config file (takes precedence over Google Drive)
+        if local_config_file is None:
+            local_config_file = os.getenv("JIRA_TRIAGER_CONFIG_FILE")
+
+        self._local_config_file = local_config_file
+
+        # Set default Google Drive folder ID (only used if no local config)
         if gdrive_folder_id is None:
             gdrive_folder_id = os.getenv("JIRA_TRIAGER_GDRIVE_FOLDER_ID")
 
         self._gdrive_folder_id = gdrive_folder_id
 
-        # Configuration loaded from Google Drive (cached per user)
+        # Configuration loaded from file or Google Drive (cached per user)
         self._user_configs: dict[str, dict] = {}  # user_id -> config dict
 
         # Store per-user Jira Triager toolkits (in-memory cache)
         self._triager_toolkits: dict[str, JiraTriagerTools] = {}
 
+        if self._local_config_file:
+            logger.info(f"JiraTriagerToolkitConfig: Using local config file: {self._local_config_file}")
+        elif self._gdrive_folder_id:
+            logger.info(f"JiraTriagerToolkitConfig: Using Google Drive folder: {self._gdrive_folder_id}")
+        else:
+            logger.warning("JiraTriagerToolkitConfig: No config source configured (no local file or GDrive folder ID)")
+
     def is_configured(self, user_id: str) -> bool:
         """Check if Jira Triager is configured for user.
 
-        Jira Triager is configured if both Jira and Google Drive are configured.
+        Jira Triager is configured if:
+        - Automation mode: Local config file exists (Jira credentials from env), OR
+        - Interactive mode: Google Drive configured and Jira credentials in database
 
         Args:
             user_id: User identifier
 
         Returns:
-            True if user has valid Jira and Google Drive credentials
+            True if user has valid configuration
         """
+        # Local config file mode (automation) - no token storage needed
+        if self._local_config_file and os.path.exists(self._local_config_file):
+            logger.debug(f"JiraTriagerToolkitConfig: is_configured=True (local file mode)")
+            return True
+
+        # Google Drive mode (interactive) - requires token storage
         if not self.token_storage:
+            logger.debug("JiraTriagerToolkitConfig: is_configured=False (no token_storage)")
             return False
 
-        # Check if user has both Jira and Google Drive credentials
+        # Check if user has Jira credentials (always required in Google Drive mode)
         has_jira = self.token_storage.get_token("jira", user_id) is not None
-        has_gdrive = self.token_storage.get_token("gdrive", user_id) is not None
+        if not has_jira:
+            logger.debug("JiraTriagerToolkitConfig: is_configured=False (no Jira token)")
+            return False
 
-        return has_jira and has_gdrive
+        # Check for Google Drive credentials
+        has_gdrive = self.token_storage.get_token("gdrive", user_id) is not None
+        logger.debug(f"JiraTriagerToolkitConfig: is_configured={has_gdrive} (Google Drive mode)")
+        return has_gdrive
 
     def extract_and_store_config(self, message: str, user_id: str) -> str | None:
         """Extract and store configuration from user message.
@@ -95,6 +127,10 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
     def get_toolkit(self, user_id: str) -> JiraTriagerTools | None:
         """Get Jira Triager toolkit for user if configured.
 
+        Works in two modes:
+        - Automation: Local config file + JIRA_API_TOKEN from environment
+        - Interactive: Google Drive config + Jira token from database
+
         Args:
             user_id: User identifier
 
@@ -109,24 +145,38 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
         if not self.is_configured(user_id):
             return None
 
-        # Load configuration from Google Drive if not already loaded
+        # Load configuration if not already loaded
         if user_id not in self._user_configs:
-            config = self._load_configuration_from_gdrive(user_id)
-            if not config:
-                logger.error(f"Failed to load configuration from Google Drive for user {user_id}")
-                return None
+            # Try local file first, then fall back to Google Drive
+            if self._local_config_file and os.path.exists(self._local_config_file):
+                config = self._load_configuration_from_file(user_id)
+                if not config:
+                    logger.error(f"Failed to load configuration from local file for user {user_id}")
+                    return None
+            else:
+                config = self._load_configuration_from_gdrive(user_id)
+                if not config:
+                    logger.error(f"Failed to load configuration from Google Drive for user {user_id}")
+                    return None
             self._user_configs[user_id] = config
 
-        # Get Jira credentials from JiraConfig via token storage
-        if not self.token_storage:
-            logger.error("Token storage not available for JiraTriagerConfig")
-            return None
-
+        # Get Jira credentials - from environment (automation) or token storage (interactive)
         try:
-            token_data = self.token_storage.get_token("jira", user_id)
-            if not token_data:
-                logger.error(f"No Jira token found for user {user_id}")
-                return None
+            # Automation mode: Get credentials from environment variables
+            if not self.token_storage:
+                jira_token_str = os.getenv("JIRA_API_TOKEN")
+                jira_server = os.getenv("JIRA_SERVER_URL", "https://issues.redhat.com")
+                if not jira_token_str:
+                    logger.error("No JIRA_API_TOKEN found in environment (automation mode)")
+                    return None
+                token_data = {"token": jira_token_str, "server_url": jira_server}
+                logger.info(f"Using JIRA_API_TOKEN from environment for user {user_id}")
+            # Interactive mode: Get credentials from token storage
+            else:
+                token_data = self.token_storage.get_token("jira", user_id)
+                if not token_data:
+                    logger.error(f"No Jira token found for user {user_id}")
+                    return None
 
             # Create the triager toolkit (logic-based, no RAG dependencies)
             toolkit = JiraTriagerTools(
@@ -275,6 +325,94 @@ class JiraTriagerToolkitConfig(BaseToolkitConfig):
                 instructions.append(f"DEFAULT_JQL_FILTER: {config['jira_filter']}")
 
         return instructions
+
+    def _load_configuration_from_file(self, user_id: str) -> dict | None:
+        """Load configuration from local file.
+
+        Loads configuration from the local rhdh-teams.json file specified by
+        JIRA_TRIAGER_CONFIG_FILE environment variable or local_config_file parameter.
+
+        The rhdh-teams.json file has the structure:
+        {
+          "Team Name": {
+            "id": "jira_team_id",
+            "components": ["Component1", "Component2"],
+            "members": ["Member1", "Member2"]
+          }
+        }
+
+        This is transformed into:
+        - team_id_map: {"Team Name": "jira_team_id"}
+        - component_team_map: {"Team Name": ["Component1", "Component2"]}
+        - team_assignee_map: {"Team Name": ["Member1", "Member2"]}
+        - allowed_teams: list of team names
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Configuration dictionary, or None if loading fails
+        """
+        if not self._local_config_file:
+            logger.error("Local config file not set")
+            return None
+
+        if not os.path.exists(self._local_config_file):
+            logger.error(f"Local config file not found: {self._local_config_file}")
+            return None
+
+        try:
+            logger.info(f"Loading Jira Triager configuration from local file: {self._local_config_file}")
+
+            with open(self._local_config_file, encoding="utf-8") as f:
+                teams_data = json.load(f)
+
+            logger.info(f"Loaded rhdh-teams.json from local file with {len(teams_data)} teams")
+
+            # Transform consolidated format into individual maps (same as Google Drive version)
+            config = {}
+            config["team_id_map"] = {}
+            config["component_team_map"] = {}
+            config["team_assignee_map"] = {}
+
+            for team_name, team_data in teams_data.items():
+                # Extract team ID (required)
+                if "id" in team_data:
+                    config["team_id_map"][team_name] = team_data["id"]
+
+                # Extract components (optional)
+                if "components" in team_data and team_data["components"]:
+                    config["component_team_map"][team_name] = team_data["components"]
+
+                # Extract members (optional)
+                if "members" in team_data and team_data["members"]:
+                    config["team_assignee_map"][team_name] = team_data["members"]
+
+            # Derive allowed_teams from team names
+            config["allowed_teams"] = list(config["team_id_map"].keys())
+            logger.info(f"Derived allowed_teams from rhdh-teams.json: {len(config['allowed_teams'])} teams")
+            logger.info(f"Loaded {len(config['component_team_map'])} teams with components")
+            logger.info(f"Loaded {len(config['team_assignee_map'])} teams with members")
+
+            # Note: jira_filter is not loaded from local file - agent will use default
+            # (could be extended to load from separate jira-filter.txt file if needed)
+
+            if not config or "team_id_map" not in config:
+                logger.error("No valid configuration loaded from local file")
+                return None
+
+            logger.info(f"Successfully loaded configuration from local file: {list(config.keys())}")
+            return config
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse {self._local_config_file}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading configuration from local file: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            return None
 
     def _load_configuration_from_gdrive(self, user_id: str) -> dict | None:
         """Load all configuration from Google Drive folder.

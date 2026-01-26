@@ -419,6 +419,17 @@ class GoogleDriveConfig(BaseToolkitConfig):
             ]
         return []
 
+    def is_required(self) -> bool:
+        """Check if this toolkit configuration is required.
+
+        Google Drive is optional - only needed if the agent uses GDrive features.
+        For automation mode (local config files), Google Drive is not required.
+
+        Returns:
+            False - Google Drive is optional
+        """
+        return False
+
     # Private helper methods
 
     def _extract_gdrive_code(self, message: str) -> str | None:

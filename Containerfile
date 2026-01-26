@@ -3,10 +3,11 @@
 
 FROM python:3.11-slim
 
-# Install system dependencies including curl for healthchecks and build tools for html-to-markdown
+# Install system dependencies including curl for healthchecks, jq for triage scripts, and build tools for html-to-markdown
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    jq \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -34,6 +35,9 @@ COPY src/agentllm /app/agentllm
 # Note: knowledge/ is in .gitignore but needed in container
 COPY examples/knowledge ./examples/
 COPY knowledge/ ./knowledge/
+
+# Layer 6: Copy scripts for triage workflow
+COPY scripts/ /app/scripts/
 
 # Create directories for runtime data persistence
 RUN mkdir -p /app/tmp/gdrive_workspace
